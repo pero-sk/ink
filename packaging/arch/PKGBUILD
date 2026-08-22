@@ -1,7 +1,7 @@
 # Maintainer: Beata C <beata.c@kittymail.com>
 
 pkgname=ink
-pkgver=0.1.0
+pkgver=0.1.5
 pkgrel=1
 pkgdesc="A small, terminal-based text editor"
 arch=('x86_64')

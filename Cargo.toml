@@ -1,6 +1,6 @@
 [package]
 name = "ink"
-version = "0.1.0"
+version = "0.1.5"
 edition = "2024"
 authors = ["pero-sk"]
 description = "A small, terminal-based text editor"
