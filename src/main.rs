@@ -5,9 +5,11 @@ mod document;
 mod editor;
 mod terminal;
 mod warn;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
+use clap::Parser;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 
 use clipboard::Clipboard;
@@ -17,20 +19,35 @@ use editor::Editor;
 use terminal::Screen;
 use warn::WarnPopup;
 
+#[derive(Parser, Debug)]
+#[command(version, about = "A terminal text editor")]
+struct Cli {
+    /// Open the file in read-only mode
+    #[arg(short = 'r', long = "readonly")]
+    readonly: bool,
+
+    /// File to open
+    path: Option<PathBuf>,
+}
+
 enum Mode {
     Editing,
     CommandBar(String),
 }
 
 fn main() -> std::io::Result<()> {
-    let path_arg = std::env::args().nth(1);
+    let cli = Cli::parse();
 
-    let doc = match path_arg {
-        Some(p) => {
-            Document::open(PathBuf::from(p)).unwrap_or_else(|_| Document::new_empty())
+    let mut doc = match cli.path {
+        Some(path) => {
+            Document::open(path).unwrap_or_else(|_| Document::new_empty())
         }
         None => Document::new_empty(),
     };
+
+    if cli.readonly {
+        doc.read_only = true;
+    }
 
     let mut editor = Editor::new(doc);
 
@@ -39,6 +56,7 @@ fn main() -> std::io::Result<()> {
 
     let (theme, theme_warning) = config::load_theme();
     let mut screen = Screen::init(theme)?;
+
     if let Some(msg) = theme_warning {
         warn.show(msg);
     }
@@ -94,13 +112,10 @@ fn main() -> std::io::Result<()> {
                     }
                 }
 
-                KeyCode::Down => {
-                    match editor.next_command() {
-                        Some(command) => *buf = command.to_string(),
-                        None => buf.clear(),
-                    }
-                }
-
+                KeyCode::Down => match editor.next_command() {
+                    Some(command) => *buf = command.to_string(),
+                    None => buf.clear(),
+                },
 
                 KeyCode::Enter => {
                     let command = buf.clone();

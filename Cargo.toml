@@ -2,6 +2,15 @@
 name = "ink"
 version = "0.1.0"
 edition = "2024"
+authors = ["pero-sk"]
+description = "A small, terminal-based text editor"
+repository = "https://github.com/pero-sk/ink"
+homepage = "https://github.com/pero-sk/ink"
+readme = "README.md"
+license = "Apache 2.0"
+license-file = "LICENSE"
+keywords = ["editor", "text-editor", "terminal", "tui", "small"]
+categories = ["text-editors"]
 
 [[bin]]
 name = "ink"
@@ -12,6 +21,7 @@ crossterm = "0.27"
 unicode-width = "0.1"
 unicode-segmentation = "1.11"
 arboard = { version = "3.4", features = ["wayland-data-control"] }
+clap = { version = "4.6.6", features = ["derive"] }
 
 [profile.release]
 opt-level = 3
