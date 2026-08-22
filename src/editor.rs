@@ -5,6 +5,9 @@ use crate::document::Document;
 pub struct Editor {
     pub documents: Vec<Document>,
     pub active: usize,
+
+    pub command_history: Vec<String>,
+    pub history_idx: Option<usize>,
 }
 
 impl Editor {
@@ -12,7 +15,51 @@ impl Editor {
         Self {
             documents: vec![document],
             active: 0,
+            command_history: Vec::new(),
+            history_idx: None,
         }
+    }
+
+    pub fn add_command_history(&mut self, command: String) {
+        if command.is_empty() {
+            return;
+        }
+
+        // Don't add the same command twice in a row.
+        if self.command_history.last() == Some(&command) {
+            self.history_idx = None;
+            return;
+        }
+
+        self.command_history.push(command);
+        self.history_idx = None;
+    }
+
+    pub fn previous_command(&mut self) -> Option<&str> {
+        if self.command_history.is_empty() {
+            return None;
+        }
+
+        let index = match self.history_idx {
+            Some(index) => index.saturating_sub(1),
+            None => self.command_history.len() - 1,
+        };
+
+        self.history_idx = Some(index);
+        Some(&self.command_history[index])
+    }
+
+    pub fn next_command(&mut self) -> Option<&str> {
+        let index = match self.history_idx {
+            Some(index) if index + 1 < self.command_history.len() => index + 1,
+            _ => {
+                self.history_idx = None;
+                return None;
+            }
+        };
+
+        self.history_idx = Some(index);
+        Some(&self.command_history[index])
     }
 
     pub fn doc_len(&self) -> usize {

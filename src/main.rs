@@ -83,8 +83,26 @@ fn main() -> std::io::Result<()> {
                     buf.pop();
                 }
 
+                KeyCode::Up => {
+                    if let Some(command) = editor.previous_command() {
+                        *buf = command.to_string();
+                    }
+                }
+
+                KeyCode::Down => {
+                    match editor.next_command() {
+                        Some(command) => *buf = command.to_string(),
+                        None => buf.clear(),
+                    }
+                }
+
+
                 KeyCode::Enter => {
-                    let nodes = command::parse(buf);
+                    let command = buf.clone();
+
+                    editor.add_command_history(command.clone());
+
+                    let nodes = command::parse(&command);
                     mode = Mode::Editing;
 
                     match nodes {
