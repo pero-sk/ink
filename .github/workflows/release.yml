@@ -66,9 +66,9 @@ jobs:
       - name: Update PKGBUILD
         run: |
           cd packaging/arch
-          # Replace the SHA256 and source URL
+          cp /tmp/ink-*.tar.gz .
           sed -i "s/sha256sums=.*/sha256sums=('$SOURCE_SHA256')/" PKGBUILD
-          sed -i 's|source=.*|source=("/tmp/ink-*.tar.gz")|' PKGBUILD
+          sed -i 's|source=.*|source=("ink-*.tar.gz")|' PKGBUILD
 
       - name: Create build user
         run: |
