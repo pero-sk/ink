@@ -8,7 +8,6 @@ repository = "https://github.com/pero-sk/ink"
 homepage = "https://github.com/pero-sk/ink"
 readme = "README.md"
 license = "Apache 2.0"
-license-file = "LICENSE"
 keywords = ["editor", "text-editor", "terminal", "tui", "small"]
 categories = ["text-editors"]
 
