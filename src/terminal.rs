@@ -10,15 +10,59 @@ use unicode_width::UnicodeWidthStr;
 use crate::warn::WarnPopup;
 use crate::{document::Document, editor::Editor};
 
+#[derive(Clone, Copy)]
+pub struct Theme {
+    pub text: Color,
+    pub tilde: Color,
+
+    pub buffer_bar_background: Color,
+    pub buffer_active_background: Color,
+    pub buffer_active_foreground: Color,
+    pub buffer_inactive_foreground: Color,
+
+    pub status_background: Color,
+    pub status_foreground: Color,
+
+    pub command_prefix: Color,
+    pub command_text: Color,
+
+    pub warning_background: Color,
+    pub warning_foreground: Color,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self {
+            text: Color::White,
+            tilde: Color::DarkCyan,
+
+            buffer_bar_background: Color::DarkGrey,
+            buffer_active_background: Color::DarkCyan,
+            buffer_active_foreground: Color::White,
+            buffer_inactive_foreground: Color::Grey,
+
+            status_background: Color::DarkCyan,
+            status_foreground: Color::White,
+
+            command_prefix: Color::DarkCyan,
+            command_text: Color::White,
+
+            warning_background: Color::DarkCyan,
+            warning_foreground: Color::White,
+        }
+    }
+}
+
 pub struct Screen {
     stdout: io::Stdout,
     pub width: u16,
     pub height: u16,
     scroll_top: usize,
+    pub theme: Theme,
 }
 
 impl Screen {
-    pub fn init() -> io::Result<Self> {
+    pub fn init(theme: Theme) -> io::Result<Self> {
         terminal::enable_raw_mode()?;
 
         let mut stdout = io::stdout();
@@ -32,6 +76,7 @@ impl Screen {
             width,
             height,
             scroll_top: 0,
+            theme,
         })
     }
 
@@ -69,9 +114,9 @@ impl Screen {
             queue!(
                 self.stdout,
                 cursor::MoveTo(0, 0),
-                SetForegroundColor(Color::White),
-                SetBackgroundColor(Color::DarkCyan),
-                Print(truncate_to_width(&w, self.width as usize,)),
+                SetForegroundColor(self.theme.warning_foreground),
+                SetBackgroundColor(self.theme.warning_background),
+                Print(truncate_to_width(&w, self.width as usize)),
                 ResetColor,
             )?;
         }
@@ -85,7 +130,7 @@ impl Screen {
         for i in 0..rows {
             let row = start + i;
 
-            queue!(self.stdout, cursor::MoveTo(0, row),)?;
+            queue!(self.stdout, cursor::MoveTo(0, row))?;
 
             let line_index = self.scroll_top + i as usize;
 
@@ -94,14 +139,14 @@ impl Screen {
 
                 queue!(
                     self.stdout,
-                    SetForegroundColor(Color::White),
+                    SetForegroundColor(self.theme.text),
                     Print(truncated),
                     ResetColor,
                 )?;
             } else {
                 queue!(
                     self.stdout,
-                    SetForegroundColor(Color::DarkCyan),
+                    SetForegroundColor(self.theme.tilde),
                     Print("~"),
                     ResetColor,
                 )?;
@@ -112,14 +157,14 @@ impl Screen {
 
         let bottom_row = self.height.saturating_sub(1);
 
-        queue!(self.stdout, cursor::MoveTo(0, bottom_row),)?;
+        queue!(self.stdout, cursor::MoveTo(0, bottom_row))?;
 
         if let Some(cmd) = command_bar {
             queue!(
                 self.stdout,
-                SetForegroundColor(Color::DarkCyan),
+                SetForegroundColor(self.theme.command_prefix),
                 Print(":"),
-                SetForegroundColor(Color::White),
+                SetForegroundColor(self.theme.command_text),
                 Print(cmd),
                 ResetColor,
             )?;
@@ -151,8 +196,8 @@ impl Screen {
         queue!(
             self.stdout,
             cursor::MoveTo(0, 0),
-            SetBackgroundColor(Color::DarkGrey),
-            SetForegroundColor(Color::White),
+            SetBackgroundColor(self.theme.buffer_bar_background),
+            SetForegroundColor(self.theme.buffer_active_foreground),
         )?;
 
         let mut col = 0usize;
@@ -177,13 +222,17 @@ impl Screen {
             if index == editor.active {
                 queue!(
                     self.stdout,
-                    SetBackgroundColor(Color::DarkCyan),
-                    SetForegroundColor(Color::White),
+                    SetBackgroundColor(self.theme.buffer_active_background),
+                    SetForegroundColor(self.theme.buffer_active_foreground),
                     Print(&label),
-                    SetBackgroundColor(Color::DarkGrey),
+                    SetBackgroundColor(self.theme.buffer_bar_background),
                 )?;
             } else {
-                queue!(self.stdout, SetForegroundColor(Color::Grey), Print(&label),)?;
+                queue!(
+                    self.stdout,
+                    SetForegroundColor(self.theme.buffer_inactive_foreground),
+                    Print(&label),
+                )?;
             }
 
             col += width;
@@ -193,7 +242,7 @@ impl Screen {
             queue!(self.stdout, Print(" ".repeat(self.width as usize - col)),)?;
         }
 
-        queue!(self.stdout, ResetColor,)?;
+        queue!(self.stdout, ResetColor)?;
 
         Ok(())
     }
@@ -216,14 +265,14 @@ impl Screen {
         }
     }
 
-    fn draw_status_bar(&mut self, doc: &crate::document::Document) -> io::Result<()> {
+    fn draw_status_bar(&mut self, doc: &Document) -> io::Result<()> {
         let status_row = self.height.saturating_sub(2);
 
         queue!(
             self.stdout,
             cursor::MoveTo(0, status_row),
-            SetForegroundColor(Color::White),
-            SetBackgroundColor(Color::DarkCyan),
+            SetForegroundColor(self.theme.status_foreground),
+            SetBackgroundColor(self.theme.status_background),
         )?;
 
         let name = doc
@@ -244,7 +293,7 @@ impl Screen {
 
         queue!(
             self.stdout,
-            Print(truncate_to_width(&status, self.width as usize,)),
+            Print(truncate_to_width(&status, self.width as usize)),
             ResetColor,
         )?;
 

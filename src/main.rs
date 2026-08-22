@@ -16,6 +16,8 @@ use editor::Editor;
 use terminal::Screen;
 use warn::WarnPopup;
 
+use crate::terminal::Theme;
+
 enum Mode {
     Editing,
     CommandBar(String),
@@ -35,7 +37,7 @@ fn main() -> std::io::Result<()> {
 
     let mut clipboard = Clipboard::new();
     let mut warn = WarnPopup::new();
-    let mut screen = Screen::init()?;
+    let mut screen = Screen::init(Theme::default())?;
     let mut mode = Mode::Editing;
     let mut should_quit = false;
 
