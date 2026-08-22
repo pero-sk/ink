@@ -1,3 +1,5 @@
+use crate::document::Document;
+
 use super::ast::{MotionDir, Node};
 use super::commands::{CommandKind, ExecContext};
 
@@ -14,8 +16,8 @@ fn exec_node(node: &Node, ctx: &mut ExecContext, forced: bool) {
             None => ctx.warn.show(format!("unknown command '{letter}'")),
         },
         Node::Motion { dir, n } => match dir {
-            MotionDir::Up => ctx.doc.move_up(*n),
-            MotionDir::Down => ctx.doc.move_down(*n),
+            MotionDir::Up => ctx.editor.doc_mut().move_up(*n),
+            MotionDir::Down => ctx.editor.doc_mut().move_down(*n),
         },
         Node::Block { items } => {
             for item in items {
@@ -38,6 +40,7 @@ fn show_help(node: &Node, ctx: &mut ExecContext) {
             Some(kind) => kind.help().to_string(),
             None => format!("no help available for '{letter}'"),
         },
+
         Node::Block { items } => {
             let letters: Vec<String> = items
                 .iter()
@@ -46,13 +49,17 @@ fn show_help(node: &Node, ctx: &mut ExecContext) {
                     _ => None,
                 })
                 .collect();
+
             format!("block: {}", letters.join(", "))
         }
+
         Node::Motion { dir, n } => match dir {
             MotionDir::Up => format!("move up {n} line(s)"),
             MotionDir::Down => format!("move down {n} line(s)"),
         },
+
         _ => "no help available".to_string(),
     };
-    ctx.warn.show(text);
+
+    ctx.editor.open(Document::from_text("help", text));
 }

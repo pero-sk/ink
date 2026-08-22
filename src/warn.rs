@@ -24,6 +24,8 @@ impl WarnPopup {
     }
 
     pub fn render_text(&self) -> Option<String> {
-        self.current.as_ref().map(|(msg, _)| format!("!warn: {msg}"))
+        self.current
+            .as_ref()
+            .map(|(msg, _)| format!("!warn: {msg}"))
     }
 }

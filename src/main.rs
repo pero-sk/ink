@@ -1,17 +1,19 @@
 mod clipboard;
 mod command;
 mod document;
+mod editor;
 mod terminal;
 mod warn;
 
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 
 use clipboard::Clipboard;
-use command::{ExecContext};
+use command::ExecContext;
 use document::Document;
+use editor::Editor;
 use terminal::Screen;
 use warn::WarnPopup;
 
@@ -22,10 +24,15 @@ enum Mode {
 
 fn main() -> std::io::Result<()> {
     let path_arg = std::env::args().nth(1);
-    let mut doc = match path_arg {
-        Some(p) => Document::open(PathBuf::from(p), false).unwrap_or_else(|_| Document::new_empty()),
+
+    let doc = match path_arg {
+        Some(p) => {
+            Document::open(PathBuf::from(p), false).unwrap_or_else(|_| Document::new_empty())
+        }
         None => Document::new_empty(),
     };
+
+    let mut editor = Editor::new(doc);
 
     let mut clipboard = Clipboard::new();
     let mut warn = WarnPopup::new();
@@ -40,7 +47,8 @@ fn main() -> std::io::Result<()> {
             Mode::CommandBar(s) => Some(s.as_str()),
             Mode::Editing => None,
         };
-        screen.draw(&doc, command_bar_text, &warn)?;
+
+        screen.draw(&editor, command_bar_text, &warn)?;
 
         if !event::poll(Duration::from_millis(200))? {
             continue;
@@ -49,49 +57,53 @@ fn main() -> std::io::Result<()> {
         let Event::Key(key) = event::read()? else {
             continue;
         };
+
         if key.kind != KeyEventKind::Press {
             continue;
         }
 
         match &mut mode {
-            Mode::Editing => match key.code {
-                KeyCode::Esc => mode = Mode::CommandBar(String::new()),
-                KeyCode::Char(c) => {
-                    if !key.modifiers.contains(KeyModifiers::CONTROL) {
-                        doc.insert_char(c);
-                    }
+            Mode::Editing => {
+                if editor.handle_key(key) {
+                    mode = Mode::CommandBar(String::new());
                 }
-                KeyCode::Enter => doc.insert_newline(),
-                KeyCode::Backspace => doc.backspace(),
-                KeyCode::Delete => doc.delete(),
-                KeyCode::Left => doc.move_left(),
-                KeyCode::Right => doc.move_right(),
-                KeyCode::Up => doc.move_up(1),
-                KeyCode::Down => doc.move_down(1),
-                _ => {}
-            },
+            }
+
             Mode::CommandBar(buf) => match key.code {
-                KeyCode::Esc => mode = Mode::Editing,
-                KeyCode::Char(c) => buf.push(c),
+                KeyCode::Esc => {
+                    mode = Mode::Editing;
+                }
+
+                KeyCode::Char(c) => {
+                    buf.push(c);
+                }
+
                 KeyCode::Backspace => {
                     buf.pop();
                 }
+
                 KeyCode::Enter => {
                     let nodes = command::parse(buf);
                     mode = Mode::Editing;
+
                     match nodes {
                         Ok(nodes) => {
                             let mut ctx = ExecContext {
-                                doc: &mut doc,
+                                editor: &mut editor,
                                 clipboard: &mut clipboard,
                                 warn: &mut warn,
                                 should_quit: &mut should_quit,
                             };
+
                             command::run(&nodes, &mut ctx);
                         }
-                        Err(e) => warn.show(e.to_string()),
+
+                        Err(e) => {
+                            warn.show(e.to_string());
+                        }
                     }
                 }
+
                 _ => {}
             },
         }
@@ -99,6 +111,7 @@ fn main() -> std::io::Result<()> {
         if should_quit {
             break;
         }
+
         screen.refresh_size()?;
     }
 

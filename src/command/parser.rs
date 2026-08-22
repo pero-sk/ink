@@ -184,7 +184,9 @@ impl Parser {
                 if digits.is_empty() {
                     return Err(self.err("expected a number after '*'"));
                 }
-                let n: usize = digits.parse().map_err(|_| self.err("invalid repeat count"))?;
+                let n: usize = digits
+                    .parse()
+                    .map_err(|_| self.err("invalid repeat count"))?;
                 Ok(Node::Repeat {
                     target: Box::new(node),
                     n,

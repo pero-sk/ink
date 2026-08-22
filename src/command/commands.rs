@@ -3,10 +3,11 @@ use std::path::PathBuf;
 use super::ast::Arg;
 use crate::clipboard::Clipboard;
 use crate::document::Document;
+use crate::editor::Editor;
 use crate::warn::WarnPopup;
 
 pub struct ExecContext<'a> {
-    pub doc: &'a mut Document,
+    pub editor: &'a mut Editor,
     pub clipboard: &'a mut Clipboard,
     pub warn: &'a mut WarnPopup,
     pub should_quit: &'a mut bool,
@@ -16,16 +17,20 @@ pub struct ExecContext<'a> {
 pub enum CommandKind {
     Save,
     Quit,
-    Open,
+    Exit,
+    Edit,
     Find,
     Replace,
-    GotoLine,
+    Goto,
     Undo,
     Redo,
     Execute,
     Copy,
     Paste,
     Delete,
+    Match,
+    PreviousFile,
+    NextFile,
 }
 
 impl CommandKind {
@@ -34,16 +39,20 @@ impl CommandKind {
         Some(match c {
             's' => Save,
             'q' => Quit,
-            'e' => Open,
+            'Q' => Exit,
+            'e' => Edit,
             'f' => Find,
             'R' => Replace,
-            'g' => GotoLine,
+            'g' => Goto,
             'u' => Undo,
             'r' => Redo,
             'x' => Execute,
             'c' => Copy,
             'p' => Paste,
             'd' => Delete,
+            'm' => Match,
+            'A' => PreviousFile,
+            'D' => NextFile,
             _ => return None,
         })
     }
@@ -52,17 +61,23 @@ impl CommandKind {
         use CommandKind::*;
         match self {
             Save => "[s] save the current document (s! to override read-only)",
-            Quit => "[q] quit (q! to force quit with unsaved changes)",
-            Open => "[e]{path} open/edit a file",
+            Quit => "[q] close file (q! to force close with unsaved changes)",
+            Exit => "[Q] quit ink",
+            Edit => "[e]{path} open/edit a file",
             Find => "[f]{find} find next occurrence of find, wrapping to the start if needed",
             Replace => "[R]{find}{replace} replace the next occurrence of find with replace",
-            GotoLine => "[g]{N} go to line N",
+            Goto => {
+                "[g]{N/arg} go to line N (or: sl-startOfLine, el-endOfLine, sf-startOfFile, ef-endOfFile)"
+            }
             Undo => "[u] undo",
             Redo => "[r] redo",
             Execute => "[x]{command} execute a shell command",
             Copy => "[c] copy current line to the system clipboard",
             Paste => "[p] paste from the system clipboard",
-            Delete => "[d];w; delete word forward from the cursor. ;l; delete to end of line from the cursor",
+            Delete => "[d] delete to end of line from the cursor",
+            Match => "[m] match to the relevant delimiter",
+            PreviousFile => "[A] go to the previous file in the editor",
+            NextFile => "[D] go to the next file in the editor",
         }
     }
 
@@ -70,28 +85,42 @@ impl CommandKind {
         use CommandKind::*;
         match self {
             Save => {
-                let result = if forced { ctx.doc.save_forced() } else { ctx.doc.save() };
+                let result = if forced {
+                    ctx.editor.doc_mut().save_forced()
+                } else {
+                    ctx.editor.doc_mut().save()
+                };
                 if let Err(e) = result {
                     ctx.warn.show(e.to_string());
                 }
             }
             Quit => {
-                if ctx.doc.dirty && !forced {
+                if ctx.editor.doc().dirty && !forced {
                     ctx.warn.show("unsaved changes. use q! to force quit");
                 } else {
-                    *ctx.should_quit = true;
+                    ctx.editor.close();
+
+                    if ctx.editor.doc_len() == 0 {
+                        *ctx.should_quit = true;
+                    }
                 }
             }
-            Open => match args.first() {
+            Exit => {
+                *ctx.should_quit = true;
+            }
+            Edit => match args.first() {
                 Some(arg) => match Document::open(PathBuf::from(arg.as_str()), forced) {
-                    Ok(new_doc) => *ctx.doc = new_doc,
+                    Ok(new_doc) => ctx.editor.open(new_doc),
                     Err(e) => ctx.warn.show(format!("open failed: {e}")),
                 },
-                None => ctx.warn.show("e requires a path argument, e.g. e;file.txt;"),
+
+                None => ctx
+                    .warn
+                    .show("e requires a path argument, e.g. e;file.txt;"),
             },
             Find => match args.first() {
                 Some(needle) => {
-                    if !ctx.doc.find_next(needle.as_str()) {
+                    if !ctx.editor.doc_mut().find_next(needle.as_str()) {
                         ctx.warn.show(format!("not found: {}", needle.as_str()));
                     }
                 }
@@ -100,30 +129,102 @@ impl CommandKind {
             Replace => match (args.first(), args.get(1)) {
                 (Some(needle), Some(replacement)) => {
                     let _ = forced;
-                    if !ctx.doc.replace_next(needle.as_str(), replacement.as_str()) {
+                    if !ctx
+                        .editor
+                        .doc_mut()
+                        .replace_next(needle.as_str(), replacement.as_str())
+                    {
                         ctx.warn.show(format!("not found: {}", needle.as_str()));
                     }
                 }
-                _ => ctx.warn.show("R requires two arguments, e.g. R;needle:replacement;"),
+                _ => ctx
+                    .warn
+                    .show("R requires two arguments, e.g. R;needle:replacement;"),
             },
-            GotoLine => match args.first().and_then(|a| a.as_str().parse::<usize>().ok()) {
-                Some(line) => ctx.doc.goto_line(line),
-                None => ctx.warn.show("g requires a line number, e.g. g;42;"),
-            },
-            Undo => ctx.doc.undo(),
-            Redo => ctx.doc.redo(),
-            Execute => match args.first() {
-                Some(cmdline) => {
-                    match std::process::Command::new("sh").arg("-c").arg(cmdline.as_str()).output() {
-                        Ok(output) => ctx.warn.show(summarise_output(&output)),
-                        Err(e) => ctx.warn.show(format!("failed to run command: {e}")),
+            Goto => match args.first().map(|a| a.as_str()) {
+                Some("ef") => {
+                    let doc = ctx.editor.doc_mut();
+
+                    if let Some(line) = doc.lines.last() {
+                        doc.cursor_line = doc.lines.len().saturating_sub(1);
+                        doc.cursor_col = line.len();
                     }
                 }
-                None => ctx.warn.show("x requires a command, e.g. x;python3 main.py;"),
+
+                Some("sf") => {
+                    ctx.editor.doc_mut().goto_line(0);
+                    ctx.editor.doc_mut().cursor_col = 0;
+                }
+
+                Some("el") => {
+                    if let Some(line) = ctx.editor.doc().lines.get(ctx.editor.doc().cursor_line) {
+                        ctx.editor.doc_mut().cursor_col = line.len();
+                    }
+                }
+
+                Some("sl") => {
+                    ctx.editor.doc_mut().cursor_col = 0;
+                }
+
+                Some(arg) => match arg.parse::<usize>() {
+                    Ok(line) => ctx.editor.doc_mut().goto_line(line),
+                    Err(_) => ctx
+                        .warn
+                        .show("g requires a line number or position, g;N; / g;ef/sf; g;el/sl;"),
+                },
+
+                None => ctx
+                    .warn
+                    .show("g requires a line number or position, g;N; / g;ef/sf; g;el/sl;"),
+            },
+            Undo => ctx.editor.doc_mut().undo(),
+            Redo => ctx.editor.doc_mut().redo(),
+            Execute => match args.first() {
+                Some(cmdline) => {
+                    match std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(cmdline.as_str())
+                        .output()
+                    {
+                        Ok(output) => {
+                            let mut text = String::new();
+
+                            if !output.stdout.is_empty() {
+                                text.push_str(&String::from_utf8_lossy(&output.stdout));
+                            }
+
+                            if !output.stderr.is_empty() {
+                                if !text.is_empty() && !text.ends_with('\n') {
+                                    text.push('\n');
+                                }
+
+                                text.push_str(&String::from_utf8_lossy(&output.stderr));
+                            }
+
+                            let mut doc = Document::from_text("out", text);
+                            doc.read_only = true;
+                            ctx.editor.open(doc);
+                        }
+
+                        Err(e) => {
+                            ctx.warn.show(format!("failed to run command: {e}"));
+                        }
+                    }
+                }
+
+                None => ctx
+                    .warn
+                    .show("x requires a command, e.g. x;python3 main.py;"),
             },
 
             Copy => {
-                let text = ctx.doc.lines.get(ctx.doc.cursor_line).cloned().unwrap_or_default();
+                let text = ctx
+                    .editor
+                    .doc()
+                    .lines
+                    .get(ctx.editor.doc().cursor_line)
+                    .cloned()
+                    .unwrap_or_default();
                 if let Err(e) = ctx.clipboard.copy(&text) {
                     ctx.warn.show(e);
                 }
@@ -132,48 +233,21 @@ impl CommandKind {
                 Ok(text) => {
                     for c in text.chars() {
                         if c == '\n' {
-                            ctx.doc.insert_newline();
+                            ctx.editor.doc_mut().insert_newline();
                         } else {
-                            ctx.doc.insert_char(c);
+                            ctx.editor.doc_mut().insert_char(c);
                         }
                     }
                 }
                 Err(e) => ctx.warn.show(e),
             },
-            Delete => match args.first().map(|a| a.as_str()) {
-                Some("w") => ctx.doc.delete_word_forward(),
-                Some("l") => ctx.doc.delete_to_end_of_line(),
-                Some(other) => ctx.warn.show(format!("unknown delete target '{other}' (use w or l)")),
-                None => ctx.warn.show("d requires a target, e.g. d;w; or d;l;"),
-            },
-        }
-    }
-}
+            Delete => ctx.editor.doc_mut().delete_to_end_of_line(),
+            Match => {
+                ctx.editor.doc_mut().jump_to_match();
+            }
 
-fn summarise_output(output: &std::process::Output) -> String {
-    const MAX_LEN: usize = 200;
- 
-    let mut msg = if output.status.success() {
-        String::from_utf8_lossy(&output.stdout).trim().replace('\n', " \u{2502} ")
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().replace('\n', " \u{2502} ");
-        let code = output
-            .status
-            .code()
-            .map(|c| c.to_string())
-            .unwrap_or_else(|| "signal".to_string());
-        if stderr.is_empty() {
-            format!("exited {code}")
-        } else {
-            format!("exited {code}: {stderr}")
+            PreviousFile => ctx.editor.previous(),
+            NextFile => ctx.editor.next(),
         }
-    };
- 
-    if msg.is_empty() {
-        msg = "(no output)".to_string();
     }
-    if msg.chars().count() > MAX_LEN {
-        msg = msg.chars().take(MAX_LEN).collect::<String>() + "...";
-    }
-    msg
 }
