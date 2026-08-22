@@ -10,7 +10,7 @@ license=('Apache-2.0')
 depends=('glibc' 'libgcc')
 makedepends=('cargo')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/pero-sk/ink/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('2f7688e76a2c80c5f5b5633c07dc916b9007c0547b56eec8dcd06e31757ed75b')
+sha256sums=('772b0ccc0d23bd924ce4a5157320b67ed4af21b9c896b007d2b017fae072270a')
 
 prepare() {
     cd "$srcdir/$pkgname-$pkgver"
