@@ -175,6 +175,15 @@ impl Document {
 
     pub fn insert_char(&mut self, c: char) {
         self.push_undo();
+        self.insert_char_raw(c);
+    }
+
+    pub fn insert_newline(&mut self) {
+        self.push_undo();
+        self.insert_newline_raw();
+    }
+
+    fn insert_char_raw(&mut self, c: char) {
         let line = &mut self.lines[self.cursor_line];
         let byte_idx = grapheme_byte_index(line, self.cursor_col);
         line.insert(byte_idx, c);
@@ -182,8 +191,7 @@ impl Document {
         self.dirty = true;
     }
 
-    pub fn insert_newline(&mut self) {
-        self.push_undo();
+    fn insert_newline_raw(&mut self) {
         let line = &mut self.lines[self.cursor_line];
         let byte_idx = grapheme_byte_index(line, self.cursor_col);
         let rest = line.split_off(byte_idx);
@@ -191,6 +199,22 @@ impl Document {
         self.cursor_line += 1;
         self.cursor_col = 0;
         self.dirty = true;
+    }
+
+    /// Inserts a whole chunk of text (e.g. a paste) as ONE undo step,
+    /// instead of one step per character.
+    pub fn insert_text(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.push_undo();
+        for c in text.chars() {
+            if c == '\n' {
+                self.insert_newline_raw();
+            } else {
+                self.insert_char_raw(c);
+            }
+        }
     }
 
     pub fn backspace(&mut self) {
@@ -541,6 +565,16 @@ impl Document {
         let line = &mut self.lines[self.cursor_line];
         let start_byte = grapheme_byte_index(line, self.cursor_col);
         line.truncate(start_byte);
+        self.dirty = true;
+    }
+
+    /// `y` -- duplicate the current line, inserting the copy directly
+    /// below it. Cursor moves down onto the new copy, same column.
+    pub fn duplicate_line(&mut self) {
+        self.push_undo();
+        let current = self.lines[self.cursor_line].clone();
+        self.lines.insert(self.cursor_line + 1, current);
+        self.cursor_line += 1;
         self.dirty = true;
     }
 }

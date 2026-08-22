@@ -32,6 +32,7 @@ pub enum CommandKind {
     PreviousFile,
     NextFile,
     Name,
+    Yank,
 }
 
 impl CommandKind {
@@ -55,6 +56,7 @@ impl CommandKind {
             'A' => PreviousFile,
             'D' => NextFile,
             'n' => Name,
+            'y' => Yank,
             _ => return None,
         })
     }
@@ -83,6 +85,7 @@ impl CommandKind {
             PreviousFile => "[A] go to the previous file in the editor",
             NextFile => "[D] go to the next file in the editor",
             Name => "[n] set the name of the currently selected file.",
+            Yank => "[y] duplicate the current line",
         }
     }
 
@@ -239,15 +242,7 @@ impl CommandKind {
                 }
             }
             Paste => match ctx.clipboard.paste() {
-                Ok(text) => {
-                    for c in text.chars() {
-                        if c == '\n' {
-                            ctx.editor.doc_mut().insert_newline();
-                        } else {
-                            ctx.editor.doc_mut().insert_char(c);
-                        }
-                    }
-                }
+                Ok(text) => ctx.editor.doc_mut().insert_text(&text),
                 Err(e) => ctx.warn.show(e),
             },
             Delete => ctx.editor.doc_mut().delete_to_end_of_line(),
@@ -265,6 +260,8 @@ impl CommandKind {
 
                 None => ctx.warn.show("n requires a filename, e.g. n;file.txt;"),
             },
+
+            Yank => ctx.editor.doc_mut().duplicate_line(),
         }
     }
 }
