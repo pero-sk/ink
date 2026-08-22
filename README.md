@@ -10,7 +10,45 @@ Ink is usable for basic editing, but it is not yet feature-complete nor a drop-i
 
 The project is still actively evolving, so internal APIs and behaviour may change.
 
-## Building
+## Installing
+
+### Linux
+
+1. Head on over to [releases](https://github.com/pero-sk/ink/releases)
+
+#### Arch-based
+
+2. download the *.pkg.tar.zst file
+3. install it with:
+```sh
+sudo pacman -U ./<filename>.pkg.tar.zst
+```
+
+#### Debian-based
+
+2. download the *.deb file
+3. install it with:
+```sh
+sudo apt install ./<filename>.deb
+```
+
+#### Other distros
+
+2. download the *-linux.tar.gz file
+3. Extract it with:
+```sh
+tar -xzf ./<filename>-linux.tar.gz
+```
+4. Run the binary:
+```sh
+./ink
+```
+
+### Windows / macOS
+
+Currently no native install file is available, you will have to build from source.
+
+## Building from source
 
 Ink requires a recent stable Rust toolchain.
 
