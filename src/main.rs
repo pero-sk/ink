@@ -4,7 +4,6 @@ mod document;
 mod editor;
 mod terminal;
 mod warn;
-
 use std::path::PathBuf;
 use std::time::Duration;
 

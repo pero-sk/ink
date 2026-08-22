@@ -1,0 +1,311 @@
+.TH INK 1 "August 2026" "Ink" "General Commands Manual"
+.SH NAME
+ink \- small terminal-based text editor
+.SH SYNOPSIS
+.B ink
+.RI [ FILE ]
+.SH DESCRIPTION
+.B ink
+is a small, terminal-based text editor written in Rust.
+
+It is designed to be lightweight and keyboard-driven, with a simple command
+language and a small codebase.
+
+If
+.I FILE
+is supplied, it is opened when Ink starts. If no file is supplied, Ink starts
+with an empty buffer.
+
+Ink supports multiple open buffers. Buffers may contain files from disk or
+generated content such as command output and help.
+
+.SH COMMAND MODE
+Press
+.B Esc
+while editing to enter the command bar.
+
+Commands consist of a command letter followed by optional arguments. Arguments
+are enclosed by semicolons and multiple arguments are separated by colons.
+
+For example:
+
+.EX
+e;file.txt;
+g;42;
+x;ls -la;
+.EE
+
+Commands can be modified using postfix modifiers.
+
+.TP
+.B !
+Force an operation when the command supports forced execution.
+
+.TP
+.B ?
+Show help for the command.
+
+.TP
+.B *N
+Repeat the command
+.I N
+times.
+
+.TP
+.B ,
+Create/Close a block, other modifiers can modify the entirety of the block.
+
+For example:
+
+.EX
+q!
+g?
+g*5
+.EE
+
+A bare
+.B ?
+has no command before it and opens the general Ink manual inside the editor.
+
+.SH ARGUMENTS
+Command arguments are normally terminated by
+.BR ;
+and separated by
+.BR : .
+
+For example:
+
+.EX
+e;file.txt;
+.EE
+
+Arguments may also be written as quoted literals when the command language
+requires them.
+
+.SH MOTIONS
+Ink provides motion nodes which can be used as part of the command language.
+
+.EX
+>       move up one line
+>5      move up five lines
+<       move down one line
+<5      move down five lines
+.EE
+
+Motion directions use the editor's command-language convention and are
+independent of normal cursor key input.
+
+.SH GOTO
+The goto command moves the cursor to a specified position.
+
+A line number moves to the corresponding line:
+
+.EX
+g;42;
+.EE
+
+Ink also supports named positions:
+
+.TP
+.B sf
+Start of file.
+
+.TP
+.B ef
+End of file.
+
+.TP
+.B sl
+Start of line.
+
+.TP
+.B el
+End of line.
+
+For example:
+
+.EX
+g;sf;
+g;ef;
+g;sl;
+g;el;
+.EE
+
+.SH BUFFERS
+Ink can have multiple documents open at the same time.
+
+Each open document is represented by a buffer and the active buffer is shown
+in the buffer bar at the top of the screen.
+
+Opening another file creates another buffer rather than replacing the current
+one.
+
+Generated content can also be opened as a buffer. This is used by features
+such as command output and help.
+
+.SH GENERATED BUFFERS
+Some commands produce content which is not associated with a file on disk.
+
+Examples include command output and the Ink manual.
+
+Generated buffers use the same document and terminal rendering mechanisms as
+normal files and can therefore be navigated like regular buffers.
+
+Such buffers may be read-only.
+
+.SH FILES
+When a file is opened, Ink stores its path with the document.
+
+Modified documents are marked as dirty in the buffer bar and status bar.
+
+Commands which would discard a modified document may require the force
+modifier
+.B !
+to proceed.
+
+.SH EDITING
+Ink is primarily controlled through the keyboard.
+
+The normal editing mode provides character insertion, deletion, cursor
+movement, word movement, indentation, and line editing.
+
+Common controls include:
+
+.TP
+.B Esc
+Enter command mode.
+
+.TP
+.B Enter
+Insert a new line.
+
+.TP
+.B Backspace
+Delete backwards.
+
+.TP
+.B Delete
+Delete forwards.
+
+.TP
+.B Ctrl-Left
+Move one word backwards.
+
+.TP
+.B Ctrl-Right
+Move one word forwards.
+
+.TP
+.B Ctrl-W
+Delete the previous word.
+
+.TP
+.B Ctrl-Delete
+Delete the next word.
+
+.SH HELP
+Ink provides built-in help through the command language.
+
+Append
+.B ?
+to a command to request information about that command:
+
+.EX
+g?
+q?
+e?
+.EE
+
+Use a bare
+.B ?
+to open the general Ink manual:
+
+.EX
+?
+.EE
+
+The help is opened as a buffer rather than displayed only as a temporary
+message.
+
+.SH EXAMPLES
+Open an existing file:
+
+.EX
+ink main.rs
+.EE
+
+Start with an empty buffer:
+
+.EX
+ink
+.EE
+
+Open another file from inside Ink:
+
+.EX
+e;other.rs;
+.EE
+
+Move to line 42:
+
+.EX
+g;42;
+.EE
+
+Move to the end of the file:
+
+.EX
+g;ef;
+.EE
+
+Run a shell command:
+
+.EX
+x;cargo check;
+.EE
+
+Display help for a command:
+
+.EX
+g?
+.EE
+
+Display the general manual:
+
+.EX
+?
+.EE
+
+.SH ENVIRONMENT
+Ink does not currently require any Ink-specific environment variables.
+
+.SH FILE FORMAT
+Ink edits text files and preserves their contents through the
+.B Document
+buffer model.
+
+.SH EXIT STATUS
+.TP
+.B 0
+Ink exited normally.
+
+.SH DIAGNOSTICS
+Errors and temporary warnings are displayed through Ink's warning interface.
+
+Command parsing errors report the position at which the parser encountered the
+problem.
+
+.SH BUGS
+Ink is still under active development and is not intended to be a drop-in
+replacement for mature terminal editors.
+
+Behaviour and internal interfaces may change.
+
+Bug reports and feature requests should be made through the project's issue
+tracker.
+
+.SH AUTHORS
+Ink contributors.
+
+.SH COPYRIGHT
+Copyright remains with the respective Ink contributors.

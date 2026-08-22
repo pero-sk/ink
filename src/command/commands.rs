@@ -60,7 +60,9 @@ impl CommandKind {
     pub fn help(&self) -> &'static str {
         use CommandKind::*;
         match self {
-            Save => "[s] save the current document (s! to override read-only)",
+            Save => {
+                "[s] save the current document (s! to override read-only, might need root privilages)"
+            }
             Quit => "[q] close file (q! to force close with unsaved changes)",
             Exit => "[Q] quit ink",
             Edit => "[e]{path} open/edit a file",
@@ -106,7 +108,12 @@ impl CommandKind {
                 }
             }
             Exit => {
-                *ctx.should_quit = true;
+                if ctx.editor.has_dirty() && !forced {
+                    ctx.warn
+                        .show("unsaved changes in a file. use Q! to force quit");
+                } else {
+                    *ctx.should_quit = true;
+                }
             }
             Edit => match args.first() {
                 Some(arg) => match Document::open(PathBuf::from(arg.as_str()), forced) {
@@ -114,9 +121,9 @@ impl CommandKind {
                     Err(e) => ctx.warn.show(format!("open failed: {e}")),
                 },
 
-                None => ctx
-                    .warn
-                    .show("e requires a path argument, e.g. e;file.txt;"),
+                None => {
+                    ctx.editor.open(Document::new_empty());
+                }
             },
             Find => match args.first() {
                 Some(needle) => {
@@ -201,9 +208,11 @@ impl CommandKind {
                                 text.push_str(&String::from_utf8_lossy(&output.stderr));
                             }
 
-                            let mut doc = Document::from_text("out", text);
-                            doc.read_only = true;
-                            ctx.editor.open(doc);
+                            if !text.is_empty() {
+                                let mut doc = Document::from_text("out", text);
+                                doc.read_only = true;
+                                ctx.editor.open(doc);
+                            }
                         }
 
                         Err(e) => {
@@ -212,11 +221,8 @@ impl CommandKind {
                     }
                 }
 
-                None => ctx
-                    .warn
-                    .show("x requires a command, e.g. x;python3 main.py;"),
+                None => ctx.warn.show("x requires a command, e.g. x;cargo check;"),
             },
-
             Copy => {
                 let text = ctx
                     .editor

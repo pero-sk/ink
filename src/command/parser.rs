@@ -45,15 +45,23 @@ impl Parser {
 
     fn parse_sequence(&mut self) -> Result<Vec<Node>, ParseError> {
         let mut nodes = Vec::new();
+
         while self.peek().is_some() {
-            let node = if self.peek() == Some(',') {
+            let node = if self.peek() == Some('?') {
+                self.advance();
+                Node::Help {
+                    target: Box::new(Node::HelpRoot),
+                }
+            } else if self.peek() == Some(',') {
                 self.parse_block()?
             } else {
                 let item = self.parse_item()?;
                 self.parse_modifier(item)?
             };
+
             nodes.push(node);
         }
+
         Ok(nodes)
     }
 

@@ -23,6 +23,16 @@ impl Editor {
         &self.documents[self.active]
     }
 
+    pub fn has_dirty(&self) -> bool {
+        for (_i, d) in self.documents.iter().enumerate() {
+            if d.dirty {
+                return true;
+            }
+        }
+
+        false
+    }
+
     pub fn doc_mut(&mut self) -> &mut Document {
         &mut self.documents[self.active]
     }

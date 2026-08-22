@@ -27,4 +27,5 @@ pub enum Node {
     Repeat { target: Box<Node>, n: usize },
     Force { target: Box<Node> },
     Help { target: Box<Node> },
+    HelpRoot,
 }

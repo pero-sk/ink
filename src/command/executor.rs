@@ -1,3 +1,4 @@
+use crate::command::help::HELP;
 use crate::document::Document;
 
 use super::ast::{MotionDir, Node};
@@ -31,6 +32,7 @@ fn exec_node(node: &Node, ctx: &mut ExecContext, forced: bool) {
         }
         Node::Force { target } => exec_node(target, ctx, true),
         Node::Help { target } => show_help(target, ctx),
+        Node::HelpRoot => return,
     }
 }
 
@@ -53,10 +55,12 @@ fn show_help(node: &Node, ctx: &mut ExecContext) {
             format!("block: {}", letters.join(", "))
         }
 
-        Node::Motion { dir, n } => match dir {
-            MotionDir::Up => format!("move up {n} line(s)"),
-            MotionDir::Down => format!("move down {n} line(s)"),
+        Node::Motion { dir, .. } => match dir {
+            MotionDir::Up => format!("move up N line(s)"),
+            MotionDir::Down => format!("move down N line(s)"),
         },
+
+        Node::HelpRoot => HELP.to_string(),
 
         _ => "no help available".to_string(),
     };
