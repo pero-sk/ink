@@ -9,13 +9,41 @@ permissions:
   contents: write
 
 jobs:
+  build-source:
+    name: Build source tarball
+    runs-on: ubuntu-latest
+    outputs:
+      sha256: ${{ steps.hash.outputs.sha256 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create source tarball
+        run: |
+          mkdir -p dist
+          tar --exclude=.git --exclude=.github --exclude=target -czf "dist/ink-${GITHUB_REF_NAME}.tar.gz" .
+
+      - name: Calculate SHA256
+        id: hash
+        run: |
+          cd dist
+          sha256sum "ink-${GITHUB_REF_NAME}.tar.gz" | awk '{print $1}' | tee sha256.txt
+          echo "sha256=$(cat sha256.txt)" >> $GITHUB_OUTPUT
+
+      - name: Upload source
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-tarball
+          path: dist/ink-*.tar.gz
+
   arch:
     name: Arch package
+    needs: build-source
     runs-on: ubuntu-latest
-
     container:
       image: archlinux:latest
-
+    env:
+      SOURCE_SHA256: ${{ needs.build-source.outputs.sha256 }}
     steps:
       - name: Install dependencies
         run: |
@@ -28,6 +56,19 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download source tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: source-tarball
+          path: /tmp
+
+      - name: Update PKGBUILD
+        run: |
+          cd packaging/arch
+          # Replace the SHA256 and source URL
+          sed -i "s/sha256sums=.*/sha256sums=('$SOURCE_SHA256')/" PKGBUILD
+          sed -i 's|source=.*|source=("/tmp/ink-*.tar.gz")|' PKGBUILD
 
       - name: Create build user
         run: |
@@ -48,7 +89,6 @@ jobs:
   debian:
     name: Debian package
     runs-on: ubuntu-latest
-
     steps:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -79,7 +119,6 @@ jobs:
   linux:
     name: Linux binary
     runs-on: ubuntu-latest
-
     steps:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -111,9 +150,7 @@ jobs:
       - arch
       - debian
       - linux
-
     runs-on: ubuntu-latest
-
     steps:
       - name: Download Arch package
         uses: actions/download-artifact@v4
