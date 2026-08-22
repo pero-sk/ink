@@ -21,14 +21,20 @@ jobs:
       - name: Create source tarball
         run: |
           mkdir -p dist
-          tar --exclude=.git --exclude=.github --exclude=target -czf "dist/ink-${GITHUB_REF_NAME}.tar.gz" .
+          VERSION="${GITHUB_REF_NAME#v}"
+
+          git archive \
+            --format=tar.gz \
+            --prefix="ink-${VERSION}/" \
+            "$GITHUB_REF_NAME" \
+            -o "dist/ink-${VERSION}.tar.gz"
 
       - name: Calculate SHA256
         id: hash
         run: |
-          cd dist
-          sha256sum "ink-${GITHUB_REF_NAME}.tar.gz" | awk '{print $1}' | tee sha256.txt
-          echo "sha256=$(cat sha256.txt)" >> $GITHUB_OUTPUT
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA256=$(sha256sum "dist/ink-${VERSION}.tar.gz" | awk '{print $1}')
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
 
       - name: Upload source
         uses: actions/upload-artifact@v4
@@ -60,17 +66,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download source tarball
+      - name: Copy source tarball
         uses: actions/download-artifact@v4
         with:
           name: source-tarball
-          path: /tmp
+          path: packaging/arch
 
-      - name: Copy source tarball
+      - name: Show copy source
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          cp "/tmp/ink-${VERSION}.tar.gz" \
-            "packaging/arch/ink-${VERSION}.tar.gz"
+          ls -lah packaging/arch
 
       - name: Update checksum
         run: |
