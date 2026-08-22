@@ -51,6 +51,14 @@ The editor is primarily keyboard-driven. Commands are entered through the comman
 Ink has built-in help for its command language. Use the bare `?` modifier to inspect the available commands and their usage rather than relying on a static command list.
 (use `?` just by itself to get information in ink)
 
+## File modifiers
+
+File modifiers are small characters that appear before or after a file in the editor. Currently ink has two:
+
+`foo.txt*` - This file has been modified without saving.
+
+`† foo.txt` - This file is Read-Only, saving won't work (unless forced).
+
 ## Project structure
 
 ```
