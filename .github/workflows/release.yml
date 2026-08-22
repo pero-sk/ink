@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  arch:
+    name: Arch package
+    runs-on: ubuntu-latest
+
+    container:
+      image: archlinux:latest
+
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            base-devel \
+            git \
+            rust \
+            namcap
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build package
+        run: |
+          cd packaging/arch
+          makepkg --syncdeps --noconfirm
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: arch-package
+          path: packaging/arch/*.pkg.tar.zst
+
+  debian:
+    name: Debian package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            dpkg-dev \
+            liblzma-dev
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --version 3.7.0
+
+      - name: Build package
+        run: cargo deb
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: debian-package
+          path: target/debian/*.deb
+
+  linux:
+    name: Linux binary
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --locked --release
+
+      - name: Package binary
+        run: |
+          mkdir -p dist
+          cp target/release/ink dist/ink
+          cp ink.1 dist/ink.1
+          cp LICENSE dist/LICENSE
+          tar -C dist -czf "ink-${GITHUB_REF_NAME}-x86_64-linux.tar.gz" \
+            ink ink.1 LICENSE
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: "*.tar.gz"
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - arch
+      - debian
+      - linux
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download Arch package
+        uses: actions/download-artifact@v4
+        with:
+          name: arch-package
+          path: release
+
+      - name: Download Debian package
+        uses: actions/download-artifact@v4
+        with:
+          name: debian-package
+          path: release
+
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: release
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

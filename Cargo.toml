@@ -25,3 +25,22 @@ clap = { version = "4.6.6", features = ["derive"] }
 [profile.release]
 opt-level = 3
 lto = true
+
+[package.metadata.deb]
+maintainer = "Beata C <beata.c@kittymail.com>"
+copyright = "2026, pero-sk"
+license-file = ["LICENSE", "0"]
+section = "editors"
+priority = "optional"
+depends = ["libc6", "libgcc-s1"]
+extended-description = """\
+Ink is a small, terminal-based text editor written in Rust.
+
+It is designed to be lightweight and keyboard-driven, with a simple command
+language and a small codebase.
+"""
+assets = [
+    ["target/release/ink", "usr/bin/", "755"],
+    ["ink.1", "usr/share/man/man1/", "644"],
+    ["LICENSE", "usr/share/doc/ink/", "644"],
+]
