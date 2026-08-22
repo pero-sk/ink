@@ -40,10 +40,13 @@ jobs:
     name: Arch package
     needs: build-source
     runs-on: ubuntu-latest
+
     container:
       image: archlinux:latest
+
     env:
       SOURCE_SHA256: ${{ needs.build-source.outputs.sha256 }}
+
     steps:
       - name: Install dependencies
         run: |
@@ -63,12 +66,16 @@ jobs:
           name: source-tarball
           path: /tmp
 
-      - name: Update PKGBUILD
+      - name: Copy source tarball
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cp "/tmp/ink-${VERSION}.tar.gz" \
+            "packaging/arch/ink-${VERSION}.tar.gz"
+
+      - name: Update checksum
         run: |
           cd packaging/arch
-          cp /tmp/ink-*.tar.gz .
-          sed -i "s/sha256sums=.*/sha256sums=('$SOURCE_SHA256')/" PKGBUILD
-          sed -i 's|source=.*|source=("ink-*.tar.gz")|' PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('$SOURCE_SHA256')/" PKGBUILD
 
       - name: Create build user
         run: |
