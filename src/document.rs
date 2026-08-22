@@ -86,7 +86,7 @@ impl Document {
         let Some(path) = &self.path else {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                "no path associated with this document; use e to set one",
+                "no path associated with this document; use n to set one",
             ));
         };
         if self.read_only {

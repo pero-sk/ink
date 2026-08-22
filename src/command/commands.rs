@@ -31,6 +31,7 @@ pub enum CommandKind {
     Match,
     PreviousFile,
     NextFile,
+    Name,
 }
 
 impl CommandKind {
@@ -53,6 +54,7 @@ impl CommandKind {
             'm' => Match,
             'A' => PreviousFile,
             'D' => NextFile,
+            'n' => Name,
             _ => return None,
         })
     }
@@ -80,6 +82,7 @@ impl CommandKind {
             Match => "[m] match to the relevant delimiter",
             PreviousFile => "[A] go to the previous file in the editor",
             NextFile => "[D] go to the next file in the editor",
+            Name => "[n] set the name of the currently selected file.",
         }
     }
 
@@ -254,6 +257,14 @@ impl CommandKind {
 
             PreviousFile => ctx.editor.previous(),
             NextFile => ctx.editor.next(),
+
+            Name => match args.first() {
+                Some(arg) => {
+                    ctx.editor.doc_mut().path = Some(PathBuf::from(arg.as_str()));
+                }
+
+                None => ctx.warn.show("n requires a filename, e.g. n;file.txt;"),
+            },
         }
     }
 }
