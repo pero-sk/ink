@@ -4,6 +4,7 @@ mod document;
 mod editor;
 mod terminal;
 mod warn;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -24,14 +25,33 @@ enum Mode {
 }
 
 fn main() -> std::io::Result<()> {
-    let path_arg = std::env::args().nth(1);
+    let args: Vec<String> = std::env::args().collect();
 
-    let doc = match path_arg {
-        Some(p) => {
-            Document::open(PathBuf::from(p)).unwrap_or_else(|_| Document::new_empty())
+    let mut readonly = false;
+    let mut path = None;
+
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "-r" | "--readonly" => {
+                readonly = true;
+            }
+            _ if path.is_none() => {
+                path = Some(PathBuf::from(arg));
+            }
+            _ => {}
+        }
+    }
+
+    let mut doc = match path {
+        Some(path) => {
+            Document::open(path).unwrap_or_else(|_| Document::new_empty())
         }
         None => Document::new_empty(),
     };
+
+    if readonly {
+        doc.read_only = true;
+    }
 
     let mut editor = Editor::new(doc);
 
@@ -95,7 +115,6 @@ fn main() -> std::io::Result<()> {
                         None => buf.clear(),
                     }
                 }
-
 
                 KeyCode::Enter => {
                     let command = buf.clone();
