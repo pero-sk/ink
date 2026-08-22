@@ -26,13 +26,18 @@ jobs:
             rust \
             namcap
 
+      - name: Create build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build package
         run: |
           cd packaging/arch
-          makepkg --syncdeps --noconfirm
+          runuser -u builder -- makepkg --syncdeps --noconfirm
 
       - name: Upload package
         uses: actions/upload-artifact@v4
