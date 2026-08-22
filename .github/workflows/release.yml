@@ -26,13 +26,13 @@ jobs:
             rust \
             namcap
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Create build user
         run: |
           useradd -m builder
           chown -R builder:builder "$GITHUB_WORKSPACE"
-
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Build package
         run: |
