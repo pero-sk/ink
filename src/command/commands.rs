@@ -122,7 +122,7 @@ impl CommandKind {
                 }
             }
             Edit => match args.first() {
-                Some(arg) => match Document::open(PathBuf::from(arg.as_str()), forced) {
+                Some(arg) => match Document::open(PathBuf::from(arg.as_str())) {
                     Ok(new_doc) => ctx.editor.open(new_doc),
                     Err(e) => ctx.warn.show(format!("open failed: {e}")),
                 },

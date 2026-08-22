@@ -212,7 +212,9 @@ impl Screen {
 
             let dirty = if doc.dirty { "*" } else { "" };
 
-            let label = format!(" {}{} ", name, dirty);
+            let readonly = if doc.read_only { "† " } else { "" };
+
+            let label = format!(" {}{}{} ", readonly, name, dirty);
             let width = UnicodeWidthStr::width(label.as_str());
 
             if col + width > self.width as usize {

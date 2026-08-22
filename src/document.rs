@@ -1,5 +1,7 @@
 use std::fs;
 use std::io;
+#[cfg(unix)]
+use std::path::Path;
 use std::path::PathBuf;
 
 use unicode_segmentation::UnicodeSegmentation;
@@ -39,15 +41,9 @@ impl Document {
         }
     }
 
-    pub fn open(path: PathBuf, force: bool) -> io::Result<Self> {
+    pub fn open(path: PathBuf) -> io::Result<Self> {
         let content = fs::read_to_string(&path).unwrap_or_default();
-        let read_only = if force {
-            fs::metadata(&path)
-                .map(|m| m.permissions().readonly())
-                .unwrap_or(false)
-        } else {
-            false
-        };
+        let read_only = is_read_only(path.as_path());
 
         let lines: Vec<String> = if content.is_empty() {
             vec![String::new()]
@@ -601,4 +597,21 @@ fn is_word_char(g: &str) -> bool {
 
 fn is_space(g: &str) -> bool {
     g.chars().all(|c| c.is_whitespace())
+}
+
+#[cfg(unix)]
+fn is_read_only(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    match std::fs::metadata(path) {
+        Ok(metadata) => metadata.permissions().mode() & 0o222 == 0,
+        Err(_) => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn is_read_only(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .map(|metadata| metadata.permissions().readonly())
+        .unwrap_or(false)
 }

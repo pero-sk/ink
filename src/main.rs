@@ -28,7 +28,7 @@ fn main() -> std::io::Result<()> {
 
     let doc = match path_arg {
         Some(p) => {
-            Document::open(PathBuf::from(p), false).unwrap_or_else(|_| Document::new_empty())
+            Document::open(PathBuf::from(p)).unwrap_or_else(|_| Document::new_empty())
         }
         None => Document::new_empty(),
     };
