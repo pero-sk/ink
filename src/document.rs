@@ -197,8 +197,6 @@ impl Document {
         self.dirty = true;
     }
 
-    /// Inserts a whole chunk of text (e.g. a paste) as ONE undo step,
-    /// instead of one step per character.
     pub fn insert_text(&mut self, text: &str) {
         if text.is_empty() {
             return;
@@ -563,9 +561,6 @@ impl Document {
         line.truncate(start_byte);
         self.dirty = true;
     }
-
-    /// `y` -- duplicate the current line, inserting the copy directly
-    /// below it. Cursor moves down onto the new copy, same column.
     pub fn duplicate_line(&mut self) {
         self.push_undo();
         let current = self.lines[self.cursor_line].clone();

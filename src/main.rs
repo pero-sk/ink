@@ -1,10 +1,10 @@
 mod clipboard;
 mod command;
+mod config;
 mod document;
 mod editor;
 mod terminal;
 mod warn;
-
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -17,47 +17,32 @@ use editor::Editor;
 use terminal::Screen;
 use warn::WarnPopup;
 
-use crate::terminal::Theme;
-
 enum Mode {
     Editing,
     CommandBar(String),
 }
 
 fn main() -> std::io::Result<()> {
-    let args: Vec<String> = std::env::args().collect();
+    let path_arg = std::env::args().nth(1);
 
-    let mut readonly = false;
-    let mut path = None;
-
-    for arg in args.iter().skip(1) {
-        match arg.as_str() {
-            "-r" | "--readonly" => {
-                readonly = true;
-            }
-            _ if path.is_none() => {
-                path = Some(PathBuf::from(arg));
-            }
-            _ => {}
-        }
-    }
-
-    let mut doc = match path {
-        Some(path) => {
-            Document::open(path).unwrap_or_else(|_| Document::new_empty())
+    let doc = match path_arg {
+        Some(p) => {
+            Document::open(PathBuf::from(p)).unwrap_or_else(|_| Document::new_empty())
         }
         None => Document::new_empty(),
     };
-
-    if readonly {
-        doc.read_only = true;
-    }
 
     let mut editor = Editor::new(doc);
 
     let mut clipboard = Clipboard::new();
     let mut warn = WarnPopup::new();
-    let mut screen = Screen::init(Theme::default())?;
+
+    let (theme, theme_warning) = config::load_theme();
+    let mut screen = Screen::init(theme)?;
+    if let Some(msg) = theme_warning {
+        warn.show(msg);
+    }
+
     let mut mode = Mode::Editing;
     let mut should_quit = false;
 
@@ -115,6 +100,7 @@ fn main() -> std::io::Result<()> {
                         None => buf.clear(),
                     }
                 }
+
 
                 KeyCode::Enter => {
                     let command = buf.clone();

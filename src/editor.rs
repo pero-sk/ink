@@ -25,7 +25,6 @@ impl Editor {
             return;
         }
 
-        // Don't add the same command twice in a row.
         if self.command_history.last() == Some(&command) {
             self.history_idx = None;
             return;
