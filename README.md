@@ -86,8 +86,7 @@ ink
 
 The editor is primarily keyboard-driven. Commands are entered through the command bar.
 
-Ink has built-in help for its command language. Use the bare `?` modifier to inspect the available commands and their usage rather than relying on a static command list.
-(use `?` just by itself to get information in ink)
+Ink has built-in help for its command language. Use the bare `?` modifier to inspect some available commands and their usage, and get basic information about ink
 
 ## File modifiers
 
