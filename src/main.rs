@@ -23,6 +23,13 @@ use warn::WarnPopup;
 
 use crate::plugin::PluginRuntime;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditResult {
+    Nothing,
+    Changed(u64),
+    CommandBar,
+}
+
 #[derive(Parser, Debug)]
 #[command(version, about = "A terminal text editor")]
 struct Cli {
@@ -90,7 +97,6 @@ fn main() -> std::io::Result<()> {
         if key.kind != KeyEventKind::Press {
             continue;
         }
-
         match &mut mode {
             Mode::Editing => {
                 if plugins.in_plugin_mode() {
@@ -106,8 +112,18 @@ fn main() -> std::io::Result<()> {
                             }
                         }
                     }
-                } else if editor.borrow_mut().handle_key(key) {
-                    mode = Mode::CommandBar(String::new());
+                } else {
+                    match editor.borrow_mut().handle_key(key) {
+                        EditResult::Changed(id) => {
+                            plugins.notify_change(id);
+                        }
+
+                        EditResult::CommandBar => {
+                            mode = Mode::CommandBar(String::new());
+                        }
+
+                        EditResult::Nothing => {}
+                    }
                 }
             }
 
@@ -156,8 +172,10 @@ fn main() -> std::io::Result<()> {
                                 should_quit: &mut should_quit,
                                 plugins: &mut plugins,
                             };
-
-                            command::run(&nodes, &mut ctx);
+                            if command::run(&nodes, &mut ctx) {
+                                let buffer_id = editor.borrow().active_id();
+                                plugins.notify_change(buffer_id);
+                            }
                         }
 
                         Err(e) => {

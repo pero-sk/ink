@@ -4,10 +4,13 @@ use crate::document::Document;
 use super::ast::{MotionDir, Node};
 use super::commands::{CommandKind, ExecContext};
 
-pub fn run(nodes: &[Node], ctx: &mut ExecContext) {
+pub fn run(nodes: &[Node], ctx: &mut ExecContext) -> bool {
+    let changed = nodes.iter().any(Node::trigger_change);
     for node in nodes {
         exec_node(node, ctx, false);
     }
+
+    changed
 }
 
 fn exec_node(node: &Node, ctx: &mut ExecContext, forced: bool) {

@@ -8,7 +8,7 @@ use rhai::{Array, Dynamic, FnPtr, Map};
 
 use rhai::plugin::*;
 
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::{Arc, Mutex, OnceLock, atomic::Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -17,6 +17,7 @@ use crate::editor::Editor;
 use crate::warn::WarnPopup;
 
 pub type Keymap = HashMap<String, (u64, usize, FnPtr)>;
+pub type ChangeMap = HashMap<u64, (usize, FnPtr)>;
 
 pub struct TimerState {
     pub document_id: u64,
@@ -34,6 +35,7 @@ pub struct Ink {
     pub current_plugin: Rc<RefCell<usize>>,
     pub timers: Rc<RefCell<HashMap<u64, TimerState>>>,
     pub next_timer_id: Rc<RefCell<u64>>,
+    pub change_callbacks: Rc<RefCell<ChangeMap>>,
 }
 
 #[export_module]
@@ -41,6 +43,15 @@ pub mod ink_api {
     use crate::document::Document;
 
     use super::*;
+
+    #[rhai_fn(global)]
+    pub fn on_change(ink: &mut Ink, buffer_id: u64, callback: FnPtr) {
+        let plugin_index = *ink.current_plugin.borrow();
+
+        ink.change_callbacks
+            .borrow_mut()
+            .insert(buffer_id, (plugin_index, callback));
+    }
 
     /// buffer's lines as an array of strings.
     #[rhai_fn(global, pure)]
@@ -195,6 +206,11 @@ pub mod ink_api {
     #[rhai_fn(global)]
     pub fn get_buffers(ink: &mut Ink) -> Vec<Document> {
         ink.editor.borrow().documents.clone()
+    }
+
+    #[rhai_fn(global)]
+    pub fn get_buffer_amount(ink: &mut Ink) -> usize {
+        ink.editor.borrow().get_docs_len()
     }
 
     /// Get a buffer by stable ID.
@@ -438,6 +454,7 @@ pub mod pathutils {
 
 struct ProcessState {
     child: Mutex<Child>,
+    stdin: Mutex<ChildStdin>,
     stdout: Arc<Mutex<Vec<u8>>>,
     stderr: Arc<Mutex<Vec<u8>>>,
     exit_code: Arc<Mutex<Option<i32>>>,
@@ -475,6 +492,7 @@ where
 
 #[export_module]
 pub mod processutils {
+    use std::io::Write;
     /// Start a shell process.
     /// Returns the process ID, or 0 on failure.
     #[rhai_fn(global)]
@@ -482,7 +500,7 @@ pub mod processutils {
         let mut child = match Command::new("sh")
             .arg("-c")
             .arg(cmd)
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -492,6 +510,10 @@ pub mod processutils {
             Err(_) => return 0,
         };
 
+        let stdin = match child.stdin.take() {
+            Some(stdin) => stdin,
+            None => return 0,
+        };
         let stdout = Arc::new(Mutex::new(Vec::new()));
         let stderr = Arc::new(Mutex::new(Vec::new()));
         let exit_code = Arc::new(Mutex::new(None));
@@ -506,6 +528,7 @@ pub mod processutils {
 
         let state = Arc::new(ProcessState {
             child: Mutex::new(child),
+            stdin: Mutex::new(stdin),
             stdout: Arc::clone(&stdout),
             stderr: Arc::clone(&stderr),
             exit_code: Arc::clone(&exit_code),
@@ -579,6 +602,48 @@ pub mod processutils {
         result
     }
 
+    /// Write to a process.
+    /// Returns true if the data was successfully written
+    #[rhai_fn(global)]
+    pub fn write(id: i64, data: &str) -> bool {
+        let state = {
+            let processes = processes().lock().unwrap();
+
+            match processes.get(&id) {
+                Some(state) => Arc::clone(state),
+                None => return false,
+            }
+        };
+
+        let mut stdin = state.stdin.lock().unwrap();
+
+        if stdin.write_all(data.as_bytes()).is_err() {
+            return false;
+        }
+
+        stdin.flush().is_ok()
+    }
+
+    #[rhai_fn(global)]
+    pub fn flush_stdout(id: i64) -> String {
+        let state = {
+            let processes = processes().lock().unwrap();
+
+            match processes.get(&id) {
+                Some(state) => Arc::clone(state),
+                None => return String::new(),
+            }
+        };
+
+        let mut output = state.stdout.lock().unwrap();
+
+        let result = String::from_utf8_lossy(&output).into_owned();
+
+        output.clear();
+
+        result
+    }
+
     /// Kill a process.
     /// Returns true if the process was successfully killed.
     #[rhai_fn(global)]
@@ -601,5 +666,196 @@ pub mod processutils {
 
             Err(_) => false,
         }
+    }
+}
+
+#[export_module]
+pub mod jsonutils {
+    use super::*;
+    use serde_json::{Map as JsonMap, Value};
+
+    fn dynamic_to_json(value: Dynamic) -> Option<Value> {
+        if value.is::<()>() {
+            return Some(Value::Null);
+        }
+
+        if let Some(value) = value.clone().try_cast::<bool>() {
+            return Some(Value::Bool(value));
+        }
+
+        if let Some(value) = value.clone().try_cast::<i64>() {
+            return Some(Value::Number(value.into()));
+        }
+
+        if let Some(value) = value.clone().try_cast::<f64>() {
+            return serde_json::Number::from_f64(value).map(Value::Number);
+        }
+
+        if let Some(value) = value.clone().try_cast::<String>() {
+            return Some(Value::String(value));
+        }
+
+        if let Some(value) = value.clone().try_cast::<Array>() {
+            let mut result = Vec::new();
+
+            for item in value {
+                result.push(dynamic_to_json(item)?);
+            }
+
+            return Some(Value::Array(result));
+        }
+
+        if let Some(value) = value.try_cast::<Map>() {
+            let mut result = JsonMap::new();
+
+            for (key, value) in value {
+                result.insert(key.to_string(), dynamic_to_json(value)?);
+            }
+
+            return Some(Value::Object(result));
+        }
+
+        None
+    }
+
+    fn json_to_dynamic(value: Value) -> Dynamic {
+        match value {
+            Value::Null => Dynamic::UNIT,
+
+            Value::Bool(value) => value.into(),
+
+            Value::Number(value) => {
+                if let Some(value) = value.as_i64() {
+                    value.into()
+                } else if let Some(value) = value.as_f64() {
+                    value.into()
+                } else {
+                    Dynamic::UNIT
+                }
+            }
+
+            Value::String(value) => value.into(),
+
+            Value::Array(value) => value
+                .into_iter()
+                .map(json_to_dynamic)
+                .collect::<Array>()
+                .into(),
+
+            Value::Object(value) => {
+                let mut map = Map::new();
+
+                for (key, value) in value {
+                    map.insert(key.into(), json_to_dynamic(value));
+                }
+
+                map.into()
+            }
+        }
+    }
+
+    /// Parse a JSON string into a Rhai value.
+    #[rhai_fn(global)]
+    pub fn parse(json: &str) -> Map {
+        let mut result = Map::new();
+
+        match serde_json::from_str::<serde_json::Value>(json) {
+            Ok(value) => {
+                result.insert("success".into(), true.into());
+                result.insert("value".into(), json_to_dynamic(value));
+            }
+
+            Err(e) => {
+                result.insert("success".into(), false.into());
+                result.insert("error".into(), e.to_string().into());
+            }
+        }
+
+        result
+    }
+
+    /// Convert a Rhai value into JSON.
+    ///
+    /// Returns an empty string if the value cannot be represented as JSON.
+    #[rhai_fn(global)]
+    pub fn stringify(value: Dynamic) -> String {
+        match dynamic_to_json(value) {
+            Some(value) => serde_json::to_string(&value).unwrap_or_default(),
+            None => String::new(),
+        }
+    }
+}
+
+#[export_module]
+pub mod configutils {
+    use std::path::{Component, PathBuf};
+
+    fn config_dir() -> Option<PathBuf> {
+        dirs::home_dir().map(|home| home.join(".ink").join("configs"))
+    }
+
+    /// Resolve a config name inside ~/.ink/configs.
+    ///
+    fn config_path(name: &str) -> Option<PathBuf> {
+        let name = name.trim();
+
+        if name.is_empty() {
+            return None;
+        }
+
+        let path = PathBuf::from(name);
+
+        // Don't allow absolute paths.
+        if path.is_absolute() {
+            return None;
+        }
+
+        // Don't allow paths that can escape ~/.ink/configs.
+        for component in path.components() {
+            match component {
+                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                    return None;
+                }
+                _ => {}
+            }
+        }
+
+        Some(config_dir()?.join(path))
+    }
+
+    #[rhai_fn(global)]
+    pub fn exists(name: &str) -> bool {
+        let Some(path) = config_path(name) else {
+            return false;
+        };
+
+        path.is_file()
+    }
+
+    #[rhai_fn(global)]
+    pub fn load(name: &str) -> String {
+        let Some(path) = config_path(name) else {
+            return String::new();
+        };
+
+        std::fs::read_to_string(path).unwrap_or_default()
+    }
+
+    #[rhai_fn(global)]
+    pub fn save(name: &str, contents: &str) -> bool {
+        let Some(path) = config_path(name) else {
+            return false;
+        };
+
+        // Create ~/.ink/configs and any requested subdirectories.
+        let Some(parent) = path.parent() else {
+            return false;
+        };
+
+        if std::fs::create_dir_all(parent).is_err() {
+            return false;
+        }
+
+        std::fs::write(path, contents).is_ok()
     }
 }

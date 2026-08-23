@@ -1,6 +1,6 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::document::Document;
+use crate::{EditResult, document::Document};
 
 #[derive(Clone)]
 pub struct Editor {
@@ -168,44 +168,57 @@ impl Editor {
         self.close_doc(id)
     }
 
-    pub fn handle_key(&mut self, key: KeyEvent) -> bool {
+    pub fn handle_key(&mut self, key: KeyEvent) -> EditResult {
+        let id = self.active_id();
+
         match key.code {
             KeyCode::Tab => {
                 self.doc_mut().indent();
+                EditResult::Changed(id)
             }
 
             KeyCode::BackTab => {
                 self.doc_mut().dedent();
+                EditResult::Changed(id)
             }
 
             KeyCode::Delete if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.doc_mut().delete_word_forward();
+                EditResult::Changed(id)
             }
 
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::ALT) => {
                 self.doc_mut().delete_word_forward();
+                EditResult::Changed(id)
             }
 
             KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.doc_mut().delete_word_backward();
+                EditResult::Changed(id)
             }
 
             KeyCode::Char(c) => {
                 if !key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.doc_mut().insert_char(c);
+                    EditResult::Changed(id)
+                } else {
+                    EditResult::Nothing
                 }
             }
 
             KeyCode::Enter => {
                 self.doc_mut().insert_newline();
+                EditResult::Changed(id)
             }
 
             KeyCode::Backspace => {
                 self.doc_mut().backspace();
+                EditResult::Changed(id)
             }
 
             KeyCode::Delete => {
                 self.doc_mut().delete();
+                EditResult::Changed(id)
             }
 
             KeyCode::Left => {
@@ -214,6 +227,8 @@ impl Editor {
                 } else {
                     self.doc_mut().move_left();
                 }
+
+                EditResult::Nothing
             }
 
             KeyCode::Right => {
@@ -222,23 +237,23 @@ impl Editor {
                 } else {
                     self.doc_mut().move_right();
                 }
+
+                EditResult::Nothing
             }
 
             KeyCode::Up => {
                 self.doc_mut().move_up(1);
+                EditResult::Nothing
             }
 
             KeyCode::Down => {
                 self.doc_mut().move_down(1);
+                EditResult::Nothing
             }
 
-            KeyCode::Esc => {
-                return true;
-            }
+            KeyCode::Esc => EditResult::CommandBar,
 
-            _ => {}
+            _ => EditResult::Nothing,
         }
-
-        false
     }
 }

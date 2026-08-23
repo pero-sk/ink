@@ -1,3 +1,5 @@
+use crate::command::commands::CommandKind;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Arg {
     Plain(String),
@@ -28,4 +30,21 @@ pub enum Node {
     Force { target: Box<Node> },
     Help { target: Box<Node> },
     HelpRoot,
+}
+impl Node {
+    pub fn trigger_change(&self) -> bool {
+        match self {
+            Node::Command { letter, .. } => CommandKind::from_char(*letter)
+                .map(|kind| kind.trigger_change())
+                .unwrap_or(false),
+
+            Node::Block { items } => items.iter().any(|item| item.trigger_change()),
+
+            Node::Repeat { target, .. } | Node::Force { target } | Node::Help { target } => {
+                target.trigger_change()
+            }
+
+            Node::Motion { .. } | Node::HelpRoot => false,
+        }
+    }
 }

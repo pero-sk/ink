@@ -11,8 +11,7 @@ mod api;
 pub use api::Ink;
 
 use crate::command::commands::CommandKind;
-
-pub type Keymap = HashMap<String, (u64, usize, FnPtr)>;
+use crate::plugin::api::ChangeMap;
 
 /// Maps a raw key event to the string name used by plugin keymaps.
 ///
@@ -51,6 +50,9 @@ pub struct PluginRuntime {
     /// Command-bar letter -> (plugin index, callback).
     commands: HashMap<char, (usize, FnPtr)>,
 
+    /// Buffer ID -> (plugin index, callback)
+    changes: HashMap<u64, (usize, FnPtr)>,
+
     ink: Ink,
 }
 
@@ -70,6 +72,7 @@ impl PluginRuntime {
             current_plugin: Rc::new(RefCell::new(0)),
             timers: Rc::new(RefCell::new(HashMap::new())),
             next_timer_id: Rc::new(RefCell::new(1)),
+            change_callbacks: Rc::new(RefCell::new(ChangeMap::new())),
         };
 
         let mut engine = Engine::new();
@@ -81,6 +84,11 @@ impl PluginRuntime {
         engine.register_static_module(
             "processutils",
             rhai::exported_module!(api::processutils).into(),
+        );
+        engine.register_static_module("jsonutils", rhai::exported_module!(api::jsonutils).into());
+        engine.register_static_module(
+            "configutils",
+            rhai::exported_module!(api::configutils).into(),
         );
 
         let ink_for_fn = ink.clone();
@@ -95,6 +103,7 @@ impl PluginRuntime {
             engine,
             plugins: Vec::new(),
             commands: HashMap::new(),
+            changes: HashMap::new(),
             ink,
         };
 
@@ -170,13 +179,6 @@ impl PluginRuntime {
         }
 
         for (letter, callback) in pending.borrow_mut().drain(..) {
-            if CommandKind::from_char(letter).is_some() {
-                self.ink.warn.borrow_mut().show(format!(
-                    "plugin {} overrides built-in command '{letter}'",
-                    path.display()
-                ));
-            }
-
             self.commands.insert(letter, (plugin_index, callback));
         }
 
@@ -284,6 +286,35 @@ impl PluginRuntime {
             let Some(plugin) = self.plugins.get(plugin_index) else {
                 continue;
             };
+
+            if let Err(e) = callback.call::<()>(&self.engine, &plugin.ast, ()) {
+                self.ink
+                    .warn
+                    .borrow_mut()
+                    .show(format!("plugin error: {e}"));
+            }
+        }
+    }
+
+    pub fn notify_change(&mut self, buffer_id: u64) {
+        let callbacks = {
+            let changes = self.ink.change_callbacks.borrow();
+
+            // change_callbacks stores a single (plugin_index, callback) per buffer;
+            // convert it to a Vec for uniform iteration.
+            changes
+                .get(&buffer_id)
+                .cloned()
+                .map(|cb| vec![cb])
+                .unwrap_or_default()
+        };
+
+        for (plugin_index, callback) in callbacks {
+            let Some(plugin) = self.plugins.get(plugin_index) else {
+                continue;
+            };
+
+            *self.ink.current_plugin.borrow_mut() = plugin_index;
 
             if let Err(e) = callback.call::<()>(&self.engine, &plugin.ast, ()) {
                 self.ink

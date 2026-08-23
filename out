@@ -1,0 +1,81 @@
+fn split_newline(cont) {
+    return cont.split("\n");
+}
+
+fn updbuf(bid, cont) {
+    ink().set_lines(bid, split_newline(cont));
+    let lns = ink().get_lines(bid);
+
+    let row = lns.len() - 1;
+    let col = lns[row].len();
+
+    ink().set_cursor(row, col);
+}
+
+fn pollout(pid, bid, tid) {
+    let output = processutils::poll(pid);
+
+    if !output["exists"] {
+        ink().timer_kill(tid);
+        return;
+    }
+
+    let cont = output["stdout"];
+    let err = output["stderr"];
+
+    if err != "" {
+        if cont != "" && !cont.ends_with("\n") {
+            cont += "\n";
+        }
+
+        cont += err;
+    }
+
+    updbuf(bid, cont);
+
+    if !output["running"] {
+        ink().timer_kill(tid);
+    }
+}
+
+fn on_command(args) {
+    if args.len() != 1 {
+        ink().warn(
+            "plugin LiveRun: invalid argument count (argcount:"
+            + args.len()
+            + ", expected: 1)"
+        );
+        return;
+    }
+
+    let cmd = args[0];
+
+    let bid = ink().new_buffer("out", true);
+    let pid = processutils::start(cmd);
+
+    if pid == 0 {
+        ink().warn("LiveRun: failed to start process");
+        ink().close_buffer(bid);
+        return;
+    }
+
+    let tid = ink().timer_reserve();
+
+    ink().warn("LiveRun: starting process (id: "+tid+")");
+
+    let pout = || {
+        pollout(pid, bid, tid);
+    };
+
+    let success = ink().timer_start(tid, bid, 0.1, pout);
+
+    if !success {
+        processutils::kill(pid);
+        ink().close_buffer(bid);
+        return;
+    }
+
+    pollout(pid, bid, tid);
+}
+
+register("x", Fn("on_command"));

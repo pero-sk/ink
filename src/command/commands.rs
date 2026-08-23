@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use super::ast::Arg;
 use crate::clipboard::Clipboard;
+use crate::command::commands::CommandKind::Replace;
 use crate::document::Document;
 use crate::editor::Editor;
 use crate::plugin::PluginRuntime;
@@ -63,6 +64,16 @@ impl CommandKind {
             'y' => Yank,
             _ => return None,
         })
+    }
+
+    pub fn trigger_change(&self) -> bool {
+        match self {
+            Self::Replace | Self::Undo | Self::Redo | Self::Paste | Self::Delete | Self::Yank => {
+                true
+            }
+
+            _ => false,
+        }
     }
 
     pub fn help(&self) -> &'static str {
