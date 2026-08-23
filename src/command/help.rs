@@ -86,5 +86,17 @@ Append '?' to a command to view information about that command.
 
 Use '?' by itself to open this help.
 
+SIMPLE COMMANDS
+
+    e - edit (more info: :e?)
+    s - save
+    q - close file
+    Q - quit ink
+    u/r - undo/redo
+    c - copy line
+    p - paste
+    A/D - Previous/Next file in editor
+    f - find (more info: :f?)
+    R - replace (more info: :R?)
 
 "#;
