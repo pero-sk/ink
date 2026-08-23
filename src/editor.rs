@@ -2,21 +2,28 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::document::Document;
 
+#[derive(Clone)]
 pub struct Editor {
     pub documents: Vec<Document>,
     pub active: usize,
 
     pub command_history: Vec<String>,
     pub history_idx: Option<usize>,
+
+    next_document_id: u64,
 }
 
 impl Editor {
-    pub fn new(document: Document) -> Self {
+    pub fn new(mut document: Document) -> Self {
+        let id = 1;
+        document.id = id;
+
         Self {
             documents: vec![document],
             active: 0,
             command_history: Vec::new(),
             history_idx: None,
+            next_document_id: id + 1,
         }
     }
 
@@ -61,31 +68,80 @@ impl Editor {
         Some(&self.command_history[index])
     }
 
-    pub fn doc_len(&self) -> usize {
+    pub fn find_doc_index(&self, id: u64) -> Option<usize> {
+        self.documents.iter().position(|doc| doc.id == id)
+    }
+
+    pub fn get_docs_len(&self) -> usize {
         self.documents.len()
+    }
+
+    pub fn get_doc_by_id(&self, id: u64) -> Option<&Document> {
+        self.find_doc_index(id).map(|index| &self.documents[index])
+    }
+
+    pub fn get_doc_by_id_mut(&mut self, id: u64) -> Option<&mut Document> {
+        self.find_doc_index(id)
+            .map(|index| &mut self.documents[index])
+    }
+
+    pub fn set_doc_by_id(&mut self, id: u64, document: Document) -> bool {
+        let Some(index) = self.find_doc_index(id) else {
+            return false;
+        };
+
+        let mut document = document;
+        document.id = id;
+
+        self.documents[index] = document;
+
+        true
+    }
+
+    pub fn close_doc(&mut self, id: u64) -> bool {
+        let Some(index) = self.find_doc_index(id) else {
+            return false;
+        };
+
+        self.documents.remove(index);
+
+        if self.documents.is_empty() {
+            self.active = 0;
+        } else if self.active > index {
+            self.active -= 1;
+        } else if self.active >= self.documents.len() {
+            self.active = self.documents.len() - 1;
+        }
+
+        true
     }
 
     pub fn doc(&self) -> &Document {
         &self.documents[self.active]
     }
 
-    pub fn has_dirty(&self) -> bool {
-        for (_i, d) in self.documents.iter().enumerate() {
-            if d.dirty {
-                return true;
-            }
-        }
-
-        false
-    }
-
     pub fn doc_mut(&mut self) -> &mut Document {
         &mut self.documents[self.active]
     }
 
-    pub fn open(&mut self, document: Document) {
+    pub fn active_id(&self) -> u64 {
+        self.documents[self.active].id
+    }
+
+    pub fn has_dirty(&self) -> bool {
+        self.documents.iter().any(|d| d.dirty)
+    }
+
+    pub fn open(&mut self, mut document: Document) -> u64 {
+        let id = self.next_document_id;
+        self.next_document_id += 1;
+
+        document.id = id;
+
         self.documents.push(document);
         self.active = self.documents.len() - 1;
+
+        id
     }
 
     pub fn next(&mut self) {
@@ -103,16 +159,13 @@ impl Editor {
         }
     }
 
-    pub fn close(&mut self) {
+    pub fn close(&mut self) -> bool {
         if self.documents.is_empty() {
-            return;
+            return false;
         }
 
-        self.documents.remove(self.active);
-
-        if !self.documents.is_empty() && self.active >= self.documents.len() {
-            self.active = self.documents.len() - 1;
-        }
+        let id = self.active_id();
+        self.close_doc(id)
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> bool {

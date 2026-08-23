@@ -12,13 +12,21 @@ pub fn run(nodes: &[Node], ctx: &mut ExecContext) {
 
 fn exec_node(node: &Node, ctx: &mut ExecContext, forced: bool) {
     match node {
-        Node::Command { letter, args } => match CommandKind::from_char(*letter) {
-            Some(kind) => kind.run(args, forced, ctx),
-            None => ctx.warn.show(format!("unknown command '{letter}'")),
-        },
+        Node::Command { letter, args } => {
+            let string_args: Vec<String> = args.iter().map(|a| a.as_str().to_string()).collect();
+            if !ctx.plugins.dispatch_command(*letter, &string_args) {
+                match CommandKind::from_char(*letter) {
+                    Some(kind) => kind.run(args, forced, ctx),
+                    None => ctx
+                        .warn
+                        .borrow_mut()
+                        .show(format!("unknown command '{letter}'")),
+                }
+            }
+        }
         Node::Motion { dir, n } => match dir {
-            MotionDir::Up => ctx.editor.doc_mut().move_up(*n),
-            MotionDir::Down => ctx.editor.doc_mut().move_down(*n),
+            MotionDir::Up => ctx.editor.borrow_mut().doc_mut().move_up(*n),
+            MotionDir::Down => ctx.editor.borrow_mut().doc_mut().move_down(*n),
         },
         Node::Block { items } => {
             for item in items {
@@ -65,5 +73,7 @@ fn show_help(node: &Node, ctx: &mut ExecContext) {
         _ => "no help available".to_string(),
     };
 
-    ctx.editor.open(Document::from_text("help", text));
+    ctx.editor
+        .borrow_mut()
+        .open(Document::from_text("help", text));
 }

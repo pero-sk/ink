@@ -5,7 +5,11 @@ use crossterm::style::Color;
 
 use crate::terminal::Theme;
 
-/// Loads ~/.inkrc (or $INK_CONFIG if set) and applies any recognized settings on top of Theme::default().
+/// Loads ~/.inkrc (or $INK_CONFIG if set) and applies any recognized
+/// settings on top of Theme::default(). No file, or an empty file, just
+/// means "use the defaults" -- not an error. Bad lines don't stop parsing
+/// or fall back to a blank theme; they're collected and returned as a
+/// single warning message so the rest of the file still applies.
 pub fn load_theme() -> (Theme, Option<String>) {
     let mut theme = Theme::default();
 
@@ -95,10 +99,67 @@ fn parse_color(s: &str) -> Option<Color> {
     })
 }
 
-fn config_path() -> Option<PathBuf> {
+pub fn config_path() -> Option<PathBuf> {
     if let Ok(custom) = std::env::var("INK_CONFIG") {
         return Some(PathBuf::from(custom));
     }
-    let home = std::env::var("HOME").ok()?;
+    // HOME is set on Linux/macOS (and on Windows under Git Bash/MSYS/WSL),
+    // but plain cmd.exe/PowerShell use USERPROFILE instead.
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok()?;
     Some(PathBuf::from(home).join(".inkrc"))
+}
+
+/// Same path as a plain String, empty if it can't be resolved -- handed
+/// to plugins as a constant (CONFIG_PATH).
+pub fn config_path_string() -> String {
+    config_path()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default()
+}
+
+/// Validates `value` the same way the startup loader would, then
+/// writes/replaces `key = value` in ~/.inkrc. Takes effect on the NEXT
+/// restart, not live -- making it live would mean sharing the running
+/// Screen's Theme as mutable state, which is a bigger change than this
+/// warrants right now. Returns false (no write happens) on an unknown
+/// key or color.
+pub fn set_theme_value(key: &str, value: &str) -> bool {
+    let mut probe = Theme::default();
+    let mut errors = Vec::new();
+    let Some(color) = parse_color(value) else {
+        return false;
+    };
+    apply(&mut probe, key, color, 0, &mut errors);
+    if !errors.is_empty() {
+        return false;
+    }
+
+    let Some(path) = config_path() else {
+        return false;
+    };
+    let existing = fs::read_to_string(&path).unwrap_or_default();
+    let mut found = false;
+    let mut lines: Vec<String> = existing
+        .lines()
+        .map(|line| {
+            let trimmed = line.trim();
+            if !found && !trimmed.starts_with('#') {
+                if let Some((k, _)) = trimmed.split_once('=') {
+                    if k.trim() == key {
+                        found = true;
+                        return format!("{key} = {value}");
+                    }
+                }
+            }
+            line.to_string()
+        })
+        .collect();
+
+    if !found {
+        lines.push(format!("{key} = {value}"));
+    }
+
+    fs::write(&path, lines.join("\n") + "\n").is_ok()
 }

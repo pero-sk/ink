@@ -28,13 +28,18 @@ impl Clipboard {
                 Err(e) => Err(format!("clipboard copy failed: {e}")),
             },
             None if osc52_sent => Ok(()),
-            None => Err("no clipboard available (OSC 52 write failed and arboard has no backend)".to_string()),
+            None => Err(
+                "no clipboard available (OSC 52 write failed and arboard has no backend)"
+                    .to_string(),
+            ),
         }
     }
 
     pub fn paste(&mut self) -> Result<String, String> {
         let arboard_result = match &mut self.inner {
-            Some(cb) => cb.get_text().map_err(|e| format!("clipboard paste failed: {e}")),
+            Some(cb) => cb
+                .get_text()
+                .map_err(|e| format!("clipboard paste failed: {e}")),
             None => Err("terminal has no clipboard. c/p is nop".to_string()),
         };
 
@@ -84,8 +89,7 @@ fn shell_paste_fallback() -> Option<String> {
 
 /// Basic base64 encoder, since OSC 52 needs the text base64-encoded.
 fn base64_encode(data: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
 
     for chunk in data.chunks(3) {

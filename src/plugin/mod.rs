@@ -12,12 +12,6 @@ pub use api::Ink;
 
 use crate::command::commands::CommandKind;
 
-/// Maps a key to:
-///
-///     (buffer_id, plugin_index, callback)
-///
-/// Buffer IDs are stable and are not affected when buffers are inserted
-/// or removed. This is important because Vec indices are not stable.
 pub type Keymap = HashMap<String, (u64, usize, FnPtr)>;
 
 /// Maps a raw key event to the string name used by plugin keymaps.
@@ -34,8 +28,7 @@ pub type Keymap = HashMap<String, (u64, usize, FnPtr)>;
 ///     "enter"
 ///     "backspace"
 ///
-/// Esc is deliberately excluded because it is handled by the editor/runtime
-/// as the unconditional "leave plugin mode" key.
+/// This excludes escape as it would be really stupid to allow plugins to override the command bar
 pub fn key_name(key: &KeyEvent) -> Option<String> {
     Some(match key.code {
         KeyCode::Char(c) => c.to_string(),
@@ -63,7 +56,6 @@ pub struct PluginRuntime {
 
 struct LoadedPlugin {
     ast: AST,
-    // scope: Scope<'static>,
 }
 
 impl PluginRuntime {
@@ -91,9 +83,6 @@ impl PluginRuntime {
             rhai::exported_module!(api::processutils).into(),
         );
 
-        // These need to be native functions because Rhai user-defined
-        // functions don't receive the caller's Scope when invoked through
-        // FnPtr.
         let ink_for_fn = ink.clone();
 
         engine.register_fn("ink", move || ink_for_fn.clone());
@@ -160,8 +149,6 @@ impl PluginRuntime {
 
         let mut scope = Scope::new();
 
-        // `register()` is installed separately for every plugin so the
-        // callback registration naturally belongs to this plugin.
         let pending: Rc<RefCell<Vec<(char, FnPtr)>>> = Rc::new(RefCell::new(Vec::new()));
 
         {

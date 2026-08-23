@@ -251,7 +251,7 @@ pub mod ink_api {
 
     /// Starts a repeating timer linked to a document id.
     /// If the document is closed, the timer is automatically killed.
-    /// Returns (success, timer_id).
+    /// Returns success.
     #[rhai_fn(global)]
     pub fn timer_start(
         ink: &mut Ink,
@@ -305,7 +305,6 @@ pub mod pathutils {
     use super::*;
 
     fn expand_tilde(path: &str) -> PathBuf {
-        // Trim accidental trailing semicolons or whitespace from script invocations
         let cleaned = path.trim().trim_matches(';');
 
         if cleaned == "~" || cleaned.starts_with("~/") {
@@ -369,7 +368,6 @@ pub mod pathutils {
         let base_path = expand_tilde(base);
         let child_path = expand_tilde(child);
 
-        // If child is already absolute (e.g., user navigated to an absolute path), return it directly
         if child_path.is_absolute() {
             return child_path.to_string_lossy().into_owned();
         }

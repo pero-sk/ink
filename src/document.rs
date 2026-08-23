@@ -8,7 +8,10 @@ use unicode_segmentation::UnicodeSegmentation;
 
 const INDENT_WIDTH: usize = 4;
 
+#[derive(Clone)]
 pub struct Document {
+    pub id: u64,
+
     pub path: Option<PathBuf>,
     pub lines: Vec<String>,
     pub cursor_line: usize,
@@ -30,6 +33,7 @@ struct Snapshot {
 impl Document {
     pub fn new_empty() -> Self {
         Self {
+            id: 0,
             path: None,
             lines: vec![String::new()],
             cursor_line: 0,
@@ -52,6 +56,7 @@ impl Document {
         };
 
         Ok(Self {
+            id: 0,
             path: Some(path),
             lines,
             cursor_line: 0,

@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 const WARN_DURATION: Duration = Duration::from_secs(3);
-
+#[derive(Clone)]
 pub struct WarnPopup {
     current: Option<(String, Instant)>,
 }

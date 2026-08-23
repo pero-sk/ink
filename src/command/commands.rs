@@ -1,16 +1,20 @@
+use std::cell::RefCell;
 use std::path::PathBuf;
+use std::rc::Rc;
 
 use super::ast::Arg;
 use crate::clipboard::Clipboard;
 use crate::document::Document;
 use crate::editor::Editor;
+use crate::plugin::PluginRuntime;
 use crate::warn::WarnPopup;
 
 pub struct ExecContext<'a> {
-    pub editor: &'a mut Editor,
+    pub editor: Rc<RefCell<Editor>>,
     pub clipboard: &'a mut Clipboard,
-    pub warn: &'a mut WarnPopup,
+    pub warn: Rc<RefCell<WarnPopup>>,
     pub should_quit: &'a mut bool,
+    pub plugins: &'a mut PluginRuntime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,29 +97,38 @@ impl CommandKind {
         use CommandKind::*;
         match self {
             Save => {
-                let result = if forced {
-                    ctx.editor.doc_mut().save_forced()
-                } else {
-                    ctx.editor.doc_mut().save()
+                let result = {
+                    let mut editor = ctx.editor.borrow_mut();
+                    if forced {
+                        editor.doc_mut().save_forced()
+                    } else {
+                        editor.doc_mut().save()
+                    }
                 };
                 if let Err(e) = result {
-                    ctx.warn.show(e.to_string());
+                    ctx.warn.borrow_mut().show(e.to_string());
                 }
             }
             Quit => {
-                if ctx.editor.doc().dirty && !forced {
-                    ctx.warn.show("unsaved changes. use q! to force quit");
+                let dirty = ctx.editor.borrow().doc().dirty;
+                if dirty && !forced {
+                    ctx.warn
+                        .borrow_mut()
+                        .show("unsaved changes. use q! to force quit");
                 } else {
-                    ctx.editor.close();
+                    let mut editor = ctx.editor.borrow_mut();
+                    editor.close();
 
-                    if ctx.editor.doc_len() == 0 {
+                    if editor.get_docs_len() == 0 {
                         *ctx.should_quit = true;
                     }
                 }
             }
             Exit => {
-                if ctx.editor.has_dirty() && !forced {
+                let has_dirty = ctx.editor.borrow().has_dirty();
+                if has_dirty && !forced {
                     ctx.warn
+                        .borrow_mut()
                         .show("unsaved changes in a file. use Q! to force quit");
                 } else {
                     *ctx.should_quit = true;
@@ -123,75 +136,98 @@ impl CommandKind {
             }
             Edit => match args.first() {
                 Some(arg) => match Document::open(PathBuf::from(arg.as_str())) {
-                    Ok(new_doc) => ctx.editor.open(new_doc),
-                    Err(e) => ctx.warn.show(format!("open failed: {e}")),
+                    Ok(new_doc) => {
+                        ctx.editor.borrow_mut().open(new_doc);
+                    }
+                    Err(e) => ctx.warn.borrow_mut().show(format!("open failed: {e}")),
                 },
 
                 None => {
-                    ctx.editor.open(Document::new_empty());
+                    ctx.editor.borrow_mut().open(Document::new_empty());
                 }
             },
             Find => match args.first() {
                 Some(needle) => {
-                    if !ctx.editor.doc_mut().find_next(needle.as_str()) {
-                        ctx.warn.show(format!("not found: {}", needle.as_str()));
+                    let found = ctx.editor.borrow_mut().doc_mut().find_next(needle.as_str());
+                    if !found {
+                        ctx.warn
+                            .borrow_mut()
+                            .show(format!("not found: {}", needle.as_str()));
                     }
                 }
-                None => ctx.warn.show("f requires a search term, e.g. f;needle;"),
+                None => ctx
+                    .warn
+                    .borrow_mut()
+                    .show("f requires a search term, e.g. f;needle;"),
             },
             Replace => match (args.first(), args.get(1)) {
                 (Some(needle), Some(replacement)) => {
                     let _ = forced;
-                    if !ctx
+                    let found = ctx
                         .editor
+                        .borrow_mut()
                         .doc_mut()
-                        .replace_next(needle.as_str(), replacement.as_str())
-                    {
-                        ctx.warn.show(format!("not found: {}", needle.as_str()));
+                        .replace_next(needle.as_str(), replacement.as_str());
+                    if !found {
+                        ctx.warn
+                            .borrow_mut()
+                            .show(format!("not found: {}", needle.as_str()));
                     }
                 }
                 _ => ctx
                     .warn
+                    .borrow_mut()
                     .show("R requires two arguments, e.g. R;needle:replacement;"),
             },
             Goto => match args.first().map(|a| a.as_str()) {
                 Some("ef") => {
-                    let doc = ctx.editor.doc_mut();
+                    let mut editor = ctx.editor.borrow_mut();
+                    let doc = editor.doc_mut();
 
                     if let Some(line) = doc.lines.last() {
+                        let line_len = line.len();
                         doc.cursor_line = doc.lines.len().saturating_sub(1);
-                        doc.cursor_col = line.len();
+                        doc.cursor_col = line_len;
                     }
                 }
 
                 Some("sf") => {
-                    ctx.editor.doc_mut().goto_line(0);
-                    ctx.editor.doc_mut().cursor_col = 0;
+                    let mut editor = ctx.editor.borrow_mut();
+                    editor.doc_mut().goto_line(0);
+                    editor.doc_mut().cursor_col = 0;
                 }
 
                 Some("el") => {
-                    if let Some(line) = ctx.editor.doc().lines.get(ctx.editor.doc().cursor_line) {
-                        ctx.editor.doc_mut().cursor_col = line.len();
+                    let mut editor = ctx.editor.borrow_mut();
+                    let line_len = editor
+                        .doc()
+                        .lines
+                        .get(editor.doc().cursor_line)
+                        .map(|l| l.len());
+                    if let Some(len) = line_len {
+                        editor.doc_mut().cursor_col = len;
                     }
                 }
 
                 Some("sl") => {
-                    ctx.editor.doc_mut().cursor_col = 0;
+                    ctx.editor.borrow_mut().doc_mut().cursor_col = 0;
                 }
 
                 Some(arg) => match arg.parse::<usize>() {
-                    Ok(line) => ctx.editor.doc_mut().goto_line(line),
+                    Ok(line) => ctx.editor.borrow_mut().doc_mut().goto_line(line),
                     Err(_) => ctx
                         .warn
+                        .borrow_mut()
                         .show("g requires a line number or position, g;N; / g;ef/sf; g;el/sl;"),
                 },
 
                 None => ctx
                     .warn
+                    .borrow_mut()
                     .show("g requires a line number or position, g;N; / g;ef/sf; g;el/sl;"),
             },
-            Undo => ctx.editor.doc_mut().undo(),
-            Redo => ctx.editor.doc_mut().redo(),
+            Undo => ctx.editor.borrow_mut().doc_mut().undo(),
+            Redo => ctx.editor.borrow_mut().doc_mut().redo(),
             Execute => match args.first() {
                 Some(cmdline) => {
                     match std::process::Command::new("sh")
@@ -217,51 +253,61 @@ impl CommandKind {
                             if !text.is_empty() {
                                 let mut doc = Document::from_text("out", text);
                                 doc.read_only = true;
-                                ctx.editor.open(doc);
+                                ctx.editor.borrow_mut().open(doc);
                             }
                         }
 
                         Err(e) => {
-                            ctx.warn.show(format!("failed to run command: {e}"));
+                            ctx.warn
+                                .borrow_mut()
+                                .show(format!("failed to run command: {e}"));
                         }
                     }
                 }
 
-                None => ctx.warn.show("x requires a command, e.g. x;cargo check;"),
+                None => ctx
+                    .warn
+                    .borrow_mut()
+                    .show("x requires a command, e.g. x;cargo check;"),
             },
             Copy => {
-                let text = ctx
-                    .editor
-                    .doc()
-                    .lines
-                    .get(ctx.editor.doc().cursor_line)
-                    .cloned()
-                    .unwrap_or_default();
+                let text = {
+                    let editor = ctx.editor.borrow();
+                    editor
+                        .doc()
+                        .lines
+                        .get(editor.doc().cursor_line)
+                        .cloned()
+                        .unwrap_or_default()
+                };
                 if let Err(e) = ctx.clipboard.copy(&text) {
-                    ctx.warn.show(e);
+                    ctx.warn.borrow_mut().show(e);
                 }
             }
             Paste => match ctx.clipboard.paste() {
-                Ok(text) => ctx.editor.doc_mut().insert_text(&text),
-                Err(e) => ctx.warn.show(e),
+                Ok(text) => ctx.editor.borrow_mut().doc_mut().insert_text(&text),
+                Err(e) => ctx.warn.borrow_mut().show(e),
             },
-            Delete => ctx.editor.doc_mut().delete_to_end_of_line(),
+            Delete => ctx.editor.borrow_mut().doc_mut().delete_to_end_of_line(),
             Match => {
-                ctx.editor.doc_mut().jump_to_match();
+                ctx.editor.borrow_mut().doc_mut().jump_to_match();
             }
 
-            PreviousFile => ctx.editor.previous(),
-            NextFile => ctx.editor.next(),
+            PreviousFile => ctx.editor.borrow_mut().previous(),
+            NextFile => ctx.editor.borrow_mut().next(),
 
             Name => match args.first() {
                 Some(arg) => {
-                    ctx.editor.doc_mut().path = Some(PathBuf::from(arg.as_str()));
+                    ctx.editor.borrow_mut().doc_mut().path = Some(PathBuf::from(arg.as_str()));
                 }
 
-                None => ctx.warn.show("n requires a filename, e.g. n;file.txt;"),
+                None => ctx
+                    .warn
+                    .borrow_mut()
+                    .show("n requires a filename, e.g. n;file.txt;"),
             },
 
-            Yank => ctx.editor.doc_mut().duplicate_line(),
+            Yank => ctx.editor.borrow_mut().doc_mut().duplicate_line(),
         }
     }
 }
