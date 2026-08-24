@@ -43,7 +43,6 @@ pub mod ink_api {
     use crate::document::Document;
 
     use super::*;
-
     #[rhai_fn(global)]
     pub fn on_change(ink: &mut Ink, buffer_id: u64, callback: FnPtr) {
         let plugin_index = *ink.current_plugin.borrow();

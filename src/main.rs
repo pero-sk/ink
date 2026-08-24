@@ -113,7 +113,12 @@ fn main() -> std::io::Result<()> {
                         }
                     }
                 } else {
-                    match editor.borrow_mut().handle_key(key) {
+                    let edit_result = {
+                        let mut ed = editor.borrow_mut();
+                        ed.handle_key(key)
+                    };
+
+                    match edit_result {
                         EditResult::Changed(id) => {
                             plugins.notify_change(id);
                         }
@@ -165,14 +170,19 @@ fn main() -> std::io::Result<()> {
 
                     match nodes {
                         Ok(nodes) => {
-                            let mut ctx = ExecContext {
-                                editor: editor.clone(),
-                                clipboard: &mut clipboard,
-                                warn: warn.clone(),
-                                should_quit: &mut should_quit,
-                                plugins: &mut plugins,
+                            let command_changed = {
+                                let mut ctx = ExecContext {
+                                    editor: editor.clone(),
+                                    clipboard: &mut clipboard,
+                                    warn: warn.clone(),
+                                    should_quit: &mut should_quit,
+                                    plugins: &mut plugins,
+                                };
+
+                                command::run(&nodes, &mut ctx)
                             };
-                            if command::run(&nodes, &mut ctx) {
+
+                            if command_changed {
                                 let buffer_id = editor.borrow().active_id();
                                 plugins.notify_change(buffer_id);
                             }
