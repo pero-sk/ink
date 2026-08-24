@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use super::ast::Arg;
 use crate::clipboard::Clipboard;
-use crate::command::commands::CommandKind::Replace;
 use crate::document::Document;
 use crate::editor::Editor;
 use crate::plugin::PluginRuntime;

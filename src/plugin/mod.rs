@@ -9,8 +9,9 @@ use rhai::{AST, Array, Dynamic, Engine, FnPtr, Scope};
 
 mod api;
 pub use api::Ink;
+use users::get_user_by_name;
+use users::os::unix::UserExt;
 
-use crate::command::commands::CommandKind;
 use crate::plugin::api::ChangeMap;
 
 /// Maps a raw key event to the string name used by plugin keymaps.
@@ -49,9 +50,6 @@ pub struct PluginRuntime {
 
     /// Command-bar letter -> (plugin index, callback).
     commands: HashMap<char, (usize, FnPtr)>,
-
-    /// Buffer ID -> (plugin index, callback)
-    changes: HashMap<u64, (usize, FnPtr)>,
 
     ink: Ink,
 }
@@ -103,7 +101,6 @@ impl PluginRuntime {
             engine,
             plugins: Vec::new(),
             commands: HashMap::new(),
-            changes: HashMap::new(),
             ink,
         };
 
@@ -112,12 +109,21 @@ impl PluginRuntime {
         runtime
     }
 
-    fn plugin_dir() -> Option<PathBuf> {
-        let home = std::env::var("HOME")
-            .or_else(|_| std::env::var("USERPROFILE"))
-            .ok()?;
+    fn home_dir() -> Option<PathBuf> {
+        if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+            if let Some(user) = get_user_by_name(&sudo_user) {
+                return Some(user.home_dir().to_path_buf());
+            }
+        }
 
-        Some(PathBuf::from(home).join(".ink").join("plugins"))
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .ok()
+            .map(PathBuf::from)
+    }
+
+    fn plugin_dir() -> Option<PathBuf> {
+        Some(Self::home_dir()?.join(".ink").join("plugins"))
     }
 
     fn load_all(&mut self) {

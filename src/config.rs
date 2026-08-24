@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
+use users::get_user_by_name;
+use users::os::unix::UserExt;
 
 use crossterm::style::Color;
 
@@ -43,7 +45,7 @@ pub fn load_theme() -> (Theme, Option<String>) {
     let warning = if errors.is_empty() {
         None
     } else {
-        Some(format!("~/.inkrc: {}", errors.join("; ")))
+        Some(format!("{}: {}", path.display(), errors.join("; ")))
     };
     (theme, warning)
 }
@@ -103,11 +105,17 @@ pub fn config_path() -> Option<PathBuf> {
     if let Ok(custom) = std::env::var("INK_CONFIG") {
         return Some(PathBuf::from(custom));
     }
-    // HOME is set on Linux/macOS (and on Windows under Git Bash/MSYS/WSL),
-    // but plain cmd.exe/PowerShell use USERPROFILE instead.
+
+    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+        if let Some(user) = get_user_by_name(&sudo_user) {
+            return Some(user.home_dir().join(".inkrc"));
+        }
+    }
+
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .ok()?;
+
     Some(PathBuf::from(home).join(".inkrc"))
 }
 
