@@ -298,7 +298,24 @@ impl CommandKind {
                 Ok(text) => ctx.editor.borrow_mut().doc_mut().insert_text(&text),
                 Err(e) => ctx.warn.borrow_mut().show(e),
             },
-            Delete => ctx.editor.borrow_mut().doc_mut().delete_to_end_of_line(),
+            Delete => {
+                let mut editor = ctx.editor.borrow_mut();
+                let doc = editor.doc_mut();
+
+                doc.delete_to_end_of_line();
+
+                if doc.lines[doc.cursor_line].is_empty() {
+                    if doc.lines.len() > 1 {
+                        doc.lines.remove(doc.cursor_line);
+
+                        if doc.cursor_line >= doc.lines.len() {
+                            doc.cursor_line = doc.lines.len() - 1;
+                        }
+                        
+                        doc.dirty = true;
+                    }
+                }
+            }
             Match => {
                 ctx.editor.borrow_mut().doc_mut().jump_to_match();
             }
